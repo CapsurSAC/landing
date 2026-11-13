@@ -108,3 +108,8 @@ form.seguimiento button:hover { background: var(--brand); color: #fff; }
 .btn.peligro:hover { background: #8f1c13; }
 main.contenido h2 { font-size: 16px; font-weight: 800; margin: 26px 0 10px; }
 main.contenido h2 small { font-weight: 600; color: var(--texto); font-size: 12px; }
+
+/* Libro de Reclamaciones */
+.reclamo-hoja { margin-bottom: 14px; }
+.reclamo-hoja h2 { margin: 0 0 8px !important; }
+.reclamo-hoja p { margin: 6px 0; font-size: 13.5px; line-height: 1.55; }

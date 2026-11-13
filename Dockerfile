@@ -37,7 +37,7 @@ ARG VITE_GA4_ID=
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY index.html programas.html vite.config.js ./
+COPY index.html programas.html libro-de-reclamaciones.html vite.config.js ./
 COPY public ./public
 COPY src ./src
 # Las reglas del formulario: las comparten el navegador y el PHP.

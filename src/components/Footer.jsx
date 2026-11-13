@@ -1,5 +1,6 @@
 import LogoCapsur from './LogoCapsur.jsx';
-import { IconoCalendario } from './Iconos.jsx';
+import { IconoCalendario, IconoLibro } from './Iconos.jsx';
+import { URL_POLITICA } from '../data/opciones.js';
 
 export default function Footer() {
   return (
@@ -16,7 +17,26 @@ export default function Footer() {
 
         <div aria-hidden="true" className="hidden h-10 w-px bg-white/25 sm:block" />
 
-        <LogoCapsur variante="claro" />
+        <div className="flex flex-col items-center gap-2 sm:items-end">
+          <LogoCapsur variante="claro" />
+          {/* El Libro de Reclamaciones debe estar a la vista (D.S. 011-2011-PCM). */}
+          <nav
+            aria-label="Legal"
+            className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-[12px]"
+          >
+            <a
+              href="/libro-de-reclamaciones.html"
+              className="inline-flex items-center gap-1.5 font-semibold text-white hover:text-amarillo"
+              data-medir="Libro de Reclamaciones"
+            >
+              <IconoLibro className="size-4" />
+              Libro de Reclamaciones
+            </a>
+            <a href={URL_POLITICA} className="text-white/80 hover:text-amarillo">
+              Política de Privacidad
+            </a>
+          </nav>
+        </div>
       </div>
     </footer>
   );

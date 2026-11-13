@@ -141,3 +141,10 @@ export const IconoCompartir = ({ className = '' }) => (
     <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
   </svg>
 );
+
+export const IconoLibro = ({ className = '' }) => (
+  <svg viewBox="0 0 24 24" className={className} {...base}>
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14Z" />
+    <path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" />
+  </svg>
+);

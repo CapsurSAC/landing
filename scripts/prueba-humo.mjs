@@ -46,7 +46,7 @@ const lead = (extra = {}) => ({
 console.log(`Prueba de humo contra ${BASE}\n`);
 
 console.log('Páginas');
-for (const ruta of ['/', '/programas.html', '/politica-de-privacidad.html', '/admin/']) {
+for (const ruta of ['/', '/programas.html', '/programas', '/programas/capacitacion', '/libro-de-reclamaciones.html', '/politica-de-privacidad.html', '/robots.txt', '/sitemap.xml', '/admin/']) {
   const r = await fetch(BASE + ruta);
   ok(r.status === 200, `${ruta} responde 200`, r.status);
 }
@@ -110,6 +110,19 @@ console.log('Posibles');
   ok(r.status === 200, 'al retirar la autorización se borra', r.status);
   r = await post('/api/posible.php', { id: 'no-es-un-id', consentimiento: true, nombre: 'x' });
   ok(r.status === 422, 'id inválido: 422', r.status);
+}
+
+console.log('Libro de Reclamaciones');
+{
+  const r = await post('/api/reclamo.php', {
+    nombre: 'Prueba de Humo', tipo_documento: 'DNI', documento: '12345678', domicilio: 'Av. Prueba 123, Tacna',
+    telefono: '951234867', correo: 'humo@ejemplo.com', bien: 'Servicio', descripcion_bien: 'Curso de prueba',
+    tipo: 'Reclamo', detalle: 'Detalle de prueba de humo.', pedido: 'Pedido de prueba.', consentimiento: true,
+  });
+  const cuerpo = await r.json().catch(() => ({}));
+  ok(r.status === 200 && /^CAPSUR-\d{4}-\d{6}$/.test(cuerpo.numero ?? ''), 'una hoja válida recibe su número', `${r.status} ${cuerpo.numero}`);
+  const malo = await post('/api/reclamo.php', { nombre: 'X' });
+  ok(malo.status === 422, 'una hoja incompleta: 422', malo.status);
 }
 
 console.log(fallos ? `\n${fallos} comprobaciones fallaron.` : '\nTodo en orden.');

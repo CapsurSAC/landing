@@ -547,6 +547,38 @@ function limpiezaOcasional(): void
     purgarLeadsAntiguos($almacen);
 }
 
+/**
+ * Feriados nacionales del Perú de un año (fijos más Jueves y Viernes Santo).
+ * Si el Congreso añade o mueve uno, súmalo aquí.
+ */
+function feriadosPeru(int $anio): array
+{
+    $fijos = ['01-01', '05-01', '06-07', '06-29', '07-23', '07-28', '07-29', '08-06', '08-30', '10-08', '11-01', '12-08', '12-09', '12-25'];
+    // Domingo de Pascua (algoritmo de Meeus/Jones/Butcher, calendario gregoriano)
+    $a = $anio % 19; $b = intdiv($anio, 100); $c = $anio % 100;
+    $d = intdiv($b, 4); $e = $b % 4; $f = intdiv($b + 8, 25); $g = intdiv($b - $f + 1, 3);
+    $h = (19 * $a + $b - $d - $g + 15) % 30; $i = intdiv($c, 4); $k = $c % 4;
+    $l = (32 + 2 * $e + 2 * $i - $h - $k) % 7; $m = intdiv($a + 11 * $h + 22 * $l, 451);
+    $mes = intdiv($h + $l - 7 * $m + 114, 31); $dia = (($h + $l - 7 * $m + 114) % 31) + 1;
+    $pascua = new DateTimeImmutable(sprintf('%d-%02d-%02d', $anio, $mes, $dia));
+    $santos = [$pascua->modify('-3 days')->format('m-d'), $pascua->modify('-2 days')->format('m-d')];
+    return array_map(static fn ($md) => "{$anio}-{$md}", [...$fijos, ...$santos]);
+}
+
+/** Fecha que resulta de contar $dias días hábiles (lunes a viernes, sin feriados). */
+function sumarDiasHabiles(DateTimeImmutable $desde, int $dias): DateTimeImmutable
+{
+    $fecha = $desde;
+    while ($dias > 0) {
+        $fecha = $fecha->modify('+1 day');
+        $esFeriado = in_array($fecha->format('Y-m-d'), feriadosPeru((int) $fecha->format('Y')), true);
+        if ((int) $fecha->format('N') <= 5 && !$esFeriado) {
+            $dias--;
+        }
+    }
+    return $fecha;
+}
+
 /** POST de JSON con tiempo de espera corto. Devuelve el cuerpo o null si falló. */
 function postJson(string $url, array $datos, int $segundos = 3): ?string
 {

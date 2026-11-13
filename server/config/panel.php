@@ -13,6 +13,7 @@ const PANEL_PAGINAS = [
     'index.php'    => 'Leads',
     'posibles.php' => 'Posibles',
     'metricas.php' => 'Métricas',
+    'reclamos.php' => 'Reclamaciones',
     'datos.php'    => 'Datos personales',
 ];
 

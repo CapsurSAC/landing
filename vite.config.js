@@ -40,11 +40,12 @@ export default defineConfig(({ mode }) => {
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    // Dos páginas: el inicio con el formulario y el detalle de programas.
+    // Tres páginas: el inicio con el formulario, los programas y el Libro de Reclamaciones.
     rollupOptions: {
       input: {
         inicio: fileURLToPath(new URL('./index.html', import.meta.url)),
         programas: fileURLToPath(new URL('./programas.html', import.meta.url)),
+        reclamaciones: fileURLToPath(new URL('./libro-de-reclamaciones.html', import.meta.url)),
       },
     },
   },

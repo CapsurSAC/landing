@@ -51,7 +51,22 @@ for (const ruta of ['/', '/programas.html', '/politica-de-privacidad.html', '/ad
   ok(r.status === 200, `${ruta} responde 200`, r.status);
 }
 
+{
+  const r = await fetch(`${BASE}/api/salud.php`);
+  ok(r.status === 200, '/api/salud.php responde 200 (storage escribible)', r.status);
+}
+
+console.log('Panel sin sesión');
+for (const ruta of ['/admin/posibles.php', '/admin/metricas.php', '/admin/datos.php']) {
+  const r = await fetch(BASE + ruta, { redirect: 'manual' });
+  ok(r.status === 303, `${ruta} manda a entrar (303)`, r.status);
+}
+
 console.log('Rutas cerradas');
+for (const ruta of ['/api/prueba.php', '/admin/panel.php']) {
+  const r = await fetch(BASE + ruta);
+  ok(r.status === 403 || r.status === 404, `${ruta} no existe para la web`, r.status);
+}
 for (const ruta of ['/config/.env', '/config/reglas.json', '/storage/leads.csv', '/vendor/autoload.php']) {
   const r = await fetch(BASE + ruta);
   ok(r.status === 404, `${ruta} responde 404`, r.status);

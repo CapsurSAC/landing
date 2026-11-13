@@ -12,6 +12,8 @@ import {
   sincronizarPosible,
 } from '../lib/borrador.js';
 import { celularInventado, PATRON_CELULAR, PATRON_CORREO } from '../lib/reglas.js';
+import { montarTurnstile, turnstileActivo } from '../lib/turnstile.js';
+import { PROGRAMAS } from '../data/programas.js';
 import { nuevoId } from '../lib/uuid.js';
 import {
   AREAS,
@@ -63,6 +65,7 @@ const enlaceWhatsApp = (ultimo, enviado = true) => {
   const respuestas = [
     ['Nombre', nombre],
     ['Área de interés', ultimo?.area],
+    ['Programa', ultimo?.programa],
     ['Objetivo', ultimo?.objetivo],
     ['Inicio', ultimo?.inicio],
   ]
@@ -84,6 +87,24 @@ const datosDe = (form) => ({
 const tieneAlgo = (datos) => CAMPOS_BORRADOR.some((c) => datos?.[c]);
 
 /** Solo valores que siguen existiendo entre las opciones. */
+/** Programa elegido en programas.html; dura lo que la pestaña (sessionStorage). */
+const CLAVE_PROGRAMA = 'capsur_programa';
+const leerPrograma = () => {
+  try {
+    return sessionStorage.getItem(CLAVE_PROGRAMA) || '';
+  } catch {
+    return '';
+  }
+};
+const guardarPrograma = (nombre) => {
+  try {
+    if (nombre) sessionStorage.setItem(CLAVE_PROGRAMA, nombre);
+    else sessionStorage.removeItem(CLAVE_PROGRAMA);
+  } catch {
+    // Sin almacenamiento: el programa solo vale hasta recargar.
+  }
+};
+
 const opcionValida = (opciones, valor) => (opciones.some((o) => o.value === valor) ? valor : '');
 
 /** Convierte el código de una opción en el texto que vio el usuario. */
@@ -166,7 +187,11 @@ export default function FormularioLead() {
   const [ultimo, setUltimo] = useState(null); // lo enviado, para el mensaje de WhatsApp
   const [celularFalso, setCelularFalso] = useState(false); // elige el mensaje de error del WhatsApp
   const [areaDeEnlace, setAreaDeEnlace] = useState(false); // llegó con ?area= desde programas.html
+  // El programa que miraba al tocar "Me interesa" (programas.html): el asesor sabe de qué hablarle.
+  const [programa, setPrograma] = useState(leerPrograma);
   const envioId = useRef(null); // se renueva solo cuando un envío sale bien
+  const contenedorTurnstile = useRef(null);
+  const turnstile = useRef({ token: '', widget: null });
 
   useValidacionAccesible(formRef);
   // Avance campo a campo para el panel de métricas; se vuelve a enganchar si el formulario se remonta.
@@ -191,11 +216,43 @@ export default function FormularioLead() {
       setSeleccion((s) => ({ ...s, area }));
       setAreaDeEnlace(true);
     }
+    const idPrograma = url.searchParams.get('programa');
+    if (idPrograma !== null) {
+      url.searchParams.delete('programa');
+      history.replaceState(history.state, '', url);
+      const elegido = PROGRAMAS.find((p) => p.id === idPrograma);
+      if (elegido) {
+        const nombre = `${elegido.institucion} — ${elegido.titulo}`;
+        guardarPrograma(nombre);
+        setPrograma(nombre);
+      }
+    }
     // El navegador no baja solo: cuando leyó el #formulario, React aún no lo había pintado.
     if (url.hash === '#formulario') {
       requestAnimationFrame(() => document.getElementById('formulario')?.scrollIntoView());
     }
   }, []);
+
+  // Turnstile (anti-bots), solo si hay clave: se monta con el formulario y se quita con él.
+  useEffect(() => {
+    if (!turnstileActivo || estado === 'exito') return undefined;
+    let vivo = true;
+    montarTurnstile(contenedorTurnstile.current, (token) => {
+      turnstile.current.token = token;
+    })
+      .then((widget) => {
+        if (vivo) turnstile.current.widget = widget;
+        else widget.quitar();
+      })
+      .catch(() => {
+        // Sin Cloudflare a mano (bloqueador, red): el servidor decidirá.
+      });
+    return () => {
+      vivo = false;
+      turnstile.current.widget?.quitar();
+      turnstile.current = { token: '', widget: null };
+    };
+  }, [estado === 'exito']); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ya con el área pintada en el select.
   useEffect(() => {
@@ -234,6 +291,7 @@ export default function FormularioLead() {
       objetivo: datos.objetivo ? etiquetaDe(OBJETIVOS, datos.objetivo) : '',
       inicio: datos.inicio ? etiquetaDe(INICIOS, datos.inicio) : '',
       marketing: datos.marketing,
+      programa,
       version_consentimiento: VERSION_CONSENTIMIENTO,
       pagina: window.location.href,
       ...origen,
@@ -277,7 +335,7 @@ export default function FormularioLead() {
     const objetivo = etiquetaDe(OBJETIVOS, datos.objetivo);
     const inicio = etiquetaDe(INICIOS, datos.inicio);
     // Antes de enviar: si el servidor falla, el enlace de WhatsApp del aviso de error también las lleva.
-    setUltimo({ nombre: datos.nombre, area, objetivo, inicio, codigo: codigoArea });
+    setUltimo({ nombre: datos.nombre, area, programa, objetivo, inicio, codigo: codigoArea });
 
     setEstado('enviando');
     try {
@@ -305,6 +363,9 @@ export default function FormularioLead() {
           posible_id: posibleId,
           // Códigos, además de los textos de arriba: con ellos se reparte y se etiqueta.
           area_codigo: codigoArea,
+          programa,
+          // Anti-bots (si está activo): el servidor lo verifica con Cloudflare.
+          turnstile: turnstile.current.token,
           area_valor: datos.area,
           objetivo_valor: datos.objetivo,
           inicio_valor: datos.inicio,
@@ -316,6 +377,8 @@ export default function FormularioLead() {
         }),
       });
 
+      // Cada token de Turnstile vale para un solo envío: se pide otro para el próximo.
+      turnstile.current.widget?.reiniciar();
       if (!respuesta.ok) throw new Error('El servidor rechazó el envío');
 
       envioId.current = null;
@@ -325,6 +388,8 @@ export default function FormularioLead() {
       setRecuperado(false);
       registrarEvento('Lead', { content_category: area });
       registrar({ tipo: 'envio' });
+      guardarPrograma('');
+      setPrograma('');
       setEstado('exito');
       formulario.reset();
       setSeleccion({ area: '', objetivo: '', inicio: '' });
@@ -591,6 +656,9 @@ export default function FormularioLead() {
             </div>
           </div>
         )}
+
+        {/* Turnstile: casi siempre invisible; solo muestra una casilla si duda. */}
+        {turnstileActivo && <div ref={contenedorTurnstile} className="mt-3 empty:hidden" />}
 
         <button type="submit" disabled={estado === 'enviando'} className="boton-principal mt-3">
           {estado === 'enviando' ? (

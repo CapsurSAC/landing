@@ -78,8 +78,15 @@ if (!$consiente || ($nombre === '' && $correo === '' && $whatsapp === '')) {
 }
 
 // Cada id nuevo es un archivo: sin tope, un script podría llenar el disco.
-if (!is_file($ruta) && !registrarSiCabe('posibles-nuevos:' . $ipLimite, 900, 20)) {
-    responder(429, ['ok' => false]);
+if (!is_file($ruta)) {
+    if (!registrarSiCabe('posibles-nuevos:' . $ipLimite, 900, 20)) {
+        responder(429, ['ok' => false]);
+    }
+    // Y un tope para todos juntos, por si el ataque viene de muchas IPs.
+    if (carpetaLlena($carpeta, max(100, (int) env('POSIBLES_MAX', '20000')))) {
+        error_log('CAPSUR: storage/posibles llegó al tope; no se guardan posibles nuevos');
+        responder(503, ['ok' => false]);
+    }
 }
 
 $ahora  = (new DateTimeImmutable('now', new DateTimeZone('America/Lima')))->format('Y-m-d H:i:s');

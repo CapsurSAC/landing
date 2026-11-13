@@ -2,8 +2,12 @@ import { RUTA_FOTOS } from '../data/programas.js';
 import { RUTA_LOGOS } from '../data/instituciones.js';
 import { IconoCheck, IconoFlecha } from './Iconos.jsx';
 
-/** Formulario del inicio, con el área ya marcada si el programa tiene una sola. */
-const urlFormulario = (area) => (area ? `/?area=${area}#formulario` : '/#formulario');
+/**
+ * Formulario del inicio, con el área ya marcada si el programa tiene una sola
+ * y el programa anotado para el asesor.
+ */
+const urlFormulario = (p) =>
+  `/?${new URLSearchParams(p.area ? { area: p.area, programa: p.id } : { programa: p.id })}#formulario`;
 
 /**
  * Una fila por institución con el detalle de su oferta, tal como viene en el
@@ -55,7 +59,7 @@ export default function Programas({ programas }) {
           </ul>
 
           <a
-            href={urlFormulario(p.area)}
+            href={urlFormulario(p)}
             className="programa__boton"
             data-medir={`Me interesa: ${p.institucion}`}
           >

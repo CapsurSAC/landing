@@ -18,9 +18,12 @@ require $carpetaConfig . '/chatwoot.php';
 
 $clave    = env('REINTENTO_TOKEN');
 $recibida = (string) ($_SERVER['HTTP_X_REINTENTO_TOKEN'] ?? '');
+// Opcional: solo desde la IP de n8n (IPs o rangos CIDR separados por coma).
+$ips      = array_filter(array_map('trim', explode(',', env('REINTENTO_IPS'))));
+$ipOk     = !$ips || ipEnRangos(ipVisitante(), $ips);
 
 // Una clave corta se trata como si no hubiera: sin clave, este archivo no existe.
-if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || strlen($clave) < 16 || !hash_equals($clave, $recibida)) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !$ipOk || strlen($clave) < 16 || !hash_equals($clave, $recibida)) {
     http_response_code(404);
     header('Content-Type: text/plain; charset=utf-8');
     exit('Not Found');

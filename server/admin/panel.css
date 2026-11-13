@@ -95,3 +95,16 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; backgrou
   .dos { grid-template-columns: 1fr; }
   .fila-barra { grid-template-columns: 110px 1fr 80px; }
 }
+
+/* Seguimiento de cada lead (estado y nota) */
+form.seguimiento { display: grid; grid-template-columns: 1fr; gap: 4px; min-width: 170px; }
+form.seguimiento select, form.seguimiento input { font: inherit; font-size: 12px; padding: 5px 7px; border: 1px solid #cbd5e1; border-radius: 8px; }
+form.seguimiento button { font: inherit; font-size: 12px; font-weight: 700; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--brand); background: #fff; color: var(--brand); cursor: pointer; }
+form.seguimiento button:hover { background: var(--brand); color: #fff; }
+
+/* Paginación, borrar y títulos de sección */
+.paginas { display: flex; gap: 10px; justify-content: center; margin: 16px 0; }
+.btn.peligro { background: #b42318; border-color: #b42318; }
+.btn.peligro:hover { background: #8f1c13; }
+main.contenido h2 { font-size: 16px; font-weight: 800; margin: 26px 0 10px; }
+main.contenido h2 small { font-weight: 600; color: var(--texto); font-size: 12px; }

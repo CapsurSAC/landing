@@ -7,29 +7,16 @@
  */
 declare(strict_types=1);
 
-$carpetaConfig = is_file(__DIR__ . '/../../config/bootstrap-min.php')
+$carpetaConfig = is_file(__DIR__ . '/../../config/panel.php')
     ? __DIR__ . '/../../config'
     : __DIR__ . '/../config';
-require $carpetaConfig . '/bootstrap-min.php';
+require $carpetaConfig . '/panel.php';
 
-header('Cache-Control: no-store');
-header('X-Frame-Options: DENY');
-header('X-Content-Type-Options: nosniff');
-header('Referrer-Policy: same-origin');
-// El panel no usa scripts, marcos ni recursos de terceros salvo la tipografía:
-// todo lo demás queda prohibido, por si algún dato de un visitante llegara a
-// pintarse sin escapar.
-header("Content-Security-Policy: default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
-
-sesionPanel();
-if (empty($_SESSION['admin'])) {
-    header('Location: index.php', true, 303);
-    exit;
-}
+paginaDelPanel();
 
 const POSIBLES_MAX = 300;
 
-$e = static fn (mixed $t): string => htmlspecialchars((string) $t, ENT_QUOTES, 'UTF-8');
+$e = h(...);
 
 // ── Lectura ────────────────────────────────────────────────────────────────
 $posibles = [];
@@ -51,6 +38,8 @@ $filtrados = $q === '' ? $posibles : array_values(array_filter($posibles, static
 $columnas = ['actualizado', 'creado', 'nombre', 'email', 'whatsapp', 'area', 'objetivo', 'inicio', 'marketing',
     'version_consentimiento', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'pagina'];
 if (isset($_GET['exportar'])) {
+    exigirReautenticacion('posibles.php?' . http_build_query(array_filter(['q' => $q]) + ['exportar' => 1]), 'exportar los posibles');
+    auditar('exportar-posibles', count($filtrados) . ' filas');
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="posibles-' . date('Ymd-Hi') . '.csv"');
     $salida = fopen('php://output', 'w');
@@ -80,33 +69,10 @@ $origenCorto = static function (array $p): string {
 <!doctype html>
 <html lang="es-PE">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="robots" content="noindex, nofollow" />
-  <title>Posibles — Panel CAPSUR</title>
-  <link rel="preload" href="/fonts/montserrat.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/fonts/montserrat.css" />
-  <link rel="stylesheet" href="panel.css" />
+  <?= cabezaHtml('Posibles') ?>
 </head>
 <body>
-  <header class="barra">
-    <div>
-      <strong>CAPSUR · Panel</strong>
-      <nav class="pestanas" aria-label="Secciones del panel">
-        <a href="index.php">Leads</a>
-        <a class="on" href="posibles.php" aria-current="page">Posibles</a>
-        <a href="metricas.php">Métricas</a>
-      </nav>
-    </div>
-    <div class="derecha">
-      <span class="usuario"><?= $e(env('ADMIN_USUARIO')) ?></span>
-      <form method="post" action="index.php">
-        <input type="hidden" name="accion" value="salir" />
-        <input type="hidden" name="csrf" value="<?= $e($_SESSION['csrf'] ?? '') ?>" />
-        <button type="submit">Salir</button>
-      </form>
-    </div>
-  </header>
+  <?= barraDelPanel('posibles.php') ?>
 
   <main class="contenido">
     <p class="resumen">

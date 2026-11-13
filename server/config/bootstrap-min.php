@@ -344,6 +344,7 @@ const COLUMNAS_LEADS = [
     'fecha', 'nombre', 'email', 'whatsapp', 'area', 'objetivo', 'inicio',
     'consiente', 'marketing', 'version_consentimiento', 'ip', 'pagina',
     'envio_id', 'area_codigo', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content',
+    'programa',
 ];
 
 /**
@@ -405,7 +406,9 @@ function sesionPanel(): void
     // Solo se aceptan identificadores que el servidor haya emitido, y solo por cookie.
     ini_set('session.use_strict_mode', '1');
     ini_set('session.use_only_cookies', '1');
-    session_name('capsur_admin');
+    // Con HTTPS, el prefijo __Host- obliga al navegador a guardarla solo para
+    // este dominio exacto, por HTTPS y en la ruta /: un subdominio no puede pisarla.
+    session_name($https ? '__Host-capsur_admin' : 'capsur_admin');
     session_set_cookie_params([
         'lifetime' => 0,
         'path'     => '/',
@@ -415,12 +418,22 @@ function sesionPanel(): void
     ]);
     session_start();
 
-    // Caduca a las 2 horas de haber entrado.
-    if (!empty($_SESSION['admin']) && (time() - (int) ($_SESSION['inicio'] ?? 0)) > 7200) {
+    // Caduca a las 2 horas de haber entrado o a los 30 minutos sin usarla.
+    $ahora = time();
+    if (!empty($_SESSION['admin'])
+        && ($ahora - (int) ($_SESSION['inicio'] ?? 0) > 7200 || $ahora - (int) ($_SESSION['ultimo'] ?? $ahora) > 1800)) {
         session_unset();
         session_destroy();
         session_start();
         $_SESSION['caducada'] = true;
+    }
+    if (!empty($_SESSION['admin'])) {
+        $_SESSION['ultimo'] = $ahora;
+        // Identificador nuevo cada 15 minutos: uno robado deja de servir pronto.
+        if ($ahora - (int) ($_SESSION['renovado'] ?? $_SESSION['inicio'] ?? $ahora) > 900) {
+            session_regenerate_id(true);
+            $_SESSION['renovado'] = $ahora;
+        }
     }
 }
 
@@ -531,6 +544,124 @@ function limpiezaOcasional(): void
         closedir($directorio);
     }
     recortarEventos($almacen . '/eventos.csv');
+    purgarLeadsAntiguos($almacen);
+}
+
+/** POST de JSON con tiempo de espera corto. Devuelve el cuerpo o null si falló. */
+function postJson(string $url, array $datos, int $segundos = 3): ?string
+{
+    $contexto = stream_context_create(['http' => [
+        'method'        => 'POST',
+        'header'        => "Content-Type: application/json\r\n",
+        'content'       => (string) json_encode($datos, JSON_UNESCAPED_UNICODE),
+        'timeout'       => $segundos,
+        'ignore_errors' => true,
+    ]]);
+    $respuesta = @file_get_contents($url, false, $contexto);
+    return $respuesta === false ? null : $respuesta;
+}
+
+/**
+ * Aviso a un webhook (n8n para avisar al asesor, Apps Script para Google
+ * Sheets…). Solo URLs https. Si falla, queda en el log y sigue: el lead ya
+ * está guardado.
+ */
+function avisarWebhook(string $url, array $datos): void
+{
+    if (!str_starts_with($url, 'https://')) {
+        error_log('CAPSUR: webhook ignorado, la URL debe empezar con https://');
+        return;
+    }
+    if (postJson($url, $datos) === null) {
+        error_log('CAPSUR: no respondió el webhook ' . (parse_url($url, PHP_URL_HOST) ?: ''));
+    }
+}
+
+/**
+ * Comprueba el token de Cloudflare Turnstile. Si Cloudflare no responde, deja
+ * pasar (y lo anota): perder leads reales por una caída ajena sería peor que
+ * dejar entrar algún bot, que igual frenan el límite por IP y la trampa.
+ */
+function turnstileValido(string $token, string $ip): bool
+{
+    if ($token === '' || strlen($token) > 2048) {
+        return false;
+    }
+    $respuesta = postJson('https://challenges.cloudflare.com/turnstile/v0/siteverify', [
+        'secret'   => env('TURNSTILE_SECRET'),
+        'response' => $token,
+        'remoteip' => $ip,
+    ], 5);
+    if ($respuesta === null) {
+        error_log('CAPSUR: Turnstile no respondió; se deja pasar el envío');
+        return true;
+    }
+    return (json_decode($respuesta, true)['success'] ?? false) === true;
+}
+
+/**
+ * Plazo de conservación (política de privacidad, punto 6): una vez al día
+ * quita de leads.csv las filas con más de RETENCION_MESES meses (24 si no se
+ * indica). Reescribe bajo el mismo bloqueo que usa api/enviar.php para añadir.
+ */
+function purgarLeadsAntiguos(string $almacen): void
+{
+    $marca = $almacen . '/rate/.purga-leads';
+    $ruta  = $almacen . '/leads.csv';
+    if (!is_file($ruta) || (is_file($marca) && time() - (int) filemtime($marca) < 86400)) {
+        return;
+    }
+    @touch($marca);
+    $meses  = max(1, (int) env('RETENCION_MESES', '24'));
+    $limite = (new DateTimeImmutable("-{$meses} months", new DateTimeZone('America/Lima')))->format('Y-m-d H:i:s');
+
+    $f = @fopen($ruta, 'c+');
+    if (!$f) {
+        return;
+    }
+    flock($f, LOCK_EX);
+    $cabecera = fgetcsv($f);
+    $quedan = [];
+    $quitadas = 0;
+    while (is_array($cabecera) && ($fila = fgetcsv($f)) !== false) {
+        // La fecha es la primera columna en todas las versiones del archivo.
+        if (($fila[0] ?? '') !== '' && $fila[0] < $limite) {
+            $quitadas++;
+            continue;
+        }
+        $quedan[] = $fila;
+    }
+    if ($quitadas > 0) {
+        rewind($f);
+        ftruncate($f, 0);
+        fputcsv($f, $cabecera);
+        foreach ($quedan as $fila) {
+            fputcsv($f, $fila);
+        }
+        fflush($f);
+        error_log("CAPSUR: plazo de conservación, {$quitadas} leads de más de {$meses} meses eliminados");
+    }
+    flock($f, LOCK_UN);
+    fclose($f);
+}
+
+/**
+ * ¿La carpeta ya tiene $maximo archivos o más? Tope global contra una red
+ * de bots que, repartida en muchas IPs, esquive el límite por IP y llene el
+ * disco. Deja de contar al llegar al tope.
+ */
+function carpetaLlena(string $carpeta, int $maximo): bool
+{
+    if (!is_dir($carpeta)) {
+        return false;
+    }
+    $n = 0;
+    foreach (new FilesystemIterator($carpeta, FilesystemIterator::SKIP_DOTS) as $_) {
+        if (++$n >= $maximo) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**

@@ -142,6 +142,11 @@ $rutaVisita = $visitas . '/' . $visita . '.json';
 if (!is_file($rutaVisita) && !registrarSiCabe('visitas-nuevas:' . $ipLimite, 900, 120)) {
     responder(429, ['ok' => false]);
 }
+// Tope global: la medición es prescindible, así que llegado el tope se calla
+// (responde bien, sin guardar) en vez de llenar el disco.
+if (!is_file($rutaVisita) && carpetaLlena($visitas, max(1000, (int) env('VISITAS_MAX', '100000')))) {
+    responder(200, ['ok' => true]);
+}
 
 // Leer, modificar y escribir bajo el mismo bloqueo: dos lotes de la misma
 // visita que llegan a la vez (dos pestañas, o el lote de salida junto a otro)

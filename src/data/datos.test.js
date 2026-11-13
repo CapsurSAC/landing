@@ -29,7 +29,10 @@ describe('programas', () => {
   it('no repite ids y cada categoría tiene al menos un programa', () => {
     expect(unicos(PROGRAMAS.map((p) => p.id))).toBe(true);
     for (const c of CATEGORIAS) {
-      expect(PROGRAMAS.some((p) => p.categorias.includes(c.id)), c.id).toBe(true);
+      expect(
+        PROGRAMAS.some((p) => p.categorias.includes(c.id)),
+        c.id,
+      ).toBe(true);
     }
   });
 });

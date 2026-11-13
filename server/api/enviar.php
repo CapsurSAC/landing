@@ -128,6 +128,16 @@ if ($errores) {
     ]);
 }
 
+// El programa que miraba en programas.html al tocar "Me interesa" (puede venir vacío).
+$programa = limpiar($entrada['programa'] ?? '', 160);
+
+// Anti-bots (Cloudflare Turnstile), solo si hay TURNSTILE_SECRET. Un reintento
+// del mismo envio_id ya pasó la prueba: no se le vuelve a pedir.
+if (env('TURNSTILE_SECRET') !== '' && !is_file($carpetaConfig . '/../storage/envios/' . $envioId)
+    && !turnstileValido(texto($entrada['turnstile'] ?? ''), $ip)) {
+    responder(403, ['ok' => false, 'error' => 'No pudimos comprobar que no eres un robot. Recarga la página e inténtalo de nuevo.']);
+}
+
 // Junto a la configuración, como el límite por IP: /home/usuario/storage en
 // cPanel, /var/www/storage en Docker y server/storage (ignorada por git) en el repositorio.
 $carpetaDatos = $carpetaConfig . '/../storage';
@@ -163,6 +173,17 @@ if ($estadoPrevio === 'enviado') {
     responder(200, ['ok' => true]);
 }
 
+// Reintento de un lead ya guardado: solo vuelve a intentar el correo, y a lo
+// sumo 3 veces. Sin este tope, repetir el mismo envio_id mandaría correos sin
+// fin sin pasar por el límite por IP (que solo cuenta los leads nuevos).
+if ($estadoPrevio === 'csv' && $marca !== '') {
+    $intentos = (int) @file_get_contents($marca . '.intentos') + 1;
+    @file_put_contents($marca . '.intentos', (string) $intentos, LOCK_EX);
+    if ($intentos > 3) {
+        responder(200, ['ok' => true]); // el lead ya está a salvo en el CSV y en el panel
+    }
+}
+
 // El lead ya está a salvo en el CSV (de esta petición o de un intento anterior).
 $guardado = $estadoPrevio === 'csv';
 
@@ -193,13 +214,32 @@ if ($estadoPrevio === '') {
             $consiente ? 'si' : 'no', $marketing ? 'si' : 'no', $version, $ip, $pagina,
             $envioId, $areaCodigo,
             $utm['utm_source'], $utm['utm_medium'], $utm['utm_campaign'], $utm['utm_content'],
+            $programa,
         ]));
         flock($manejador, LOCK_UN);
         fclose($manejador);
         $marcar('csv');
         $guardado = true;
+        $leadNuevo = true;
     } else {
         error_log('CAPSUR: no se pudo escribir en ' . $csv);
+    }
+}
+
+// ── 8a. Avisos: asesor al instante (n8n) y copia en Google Sheets ──────────
+// Solo para leads nuevos, con 3 s de espera como mucho: si fallan, el lead ya
+// está a salvo y la persona no se entera.
+if (!empty($leadNuevo)) {
+    $resumen = [
+        'fecha' => $fecha, 'nombre' => $nombre, 'correo' => $correo, 'whatsapp' => $whatsapp,
+        'area' => $area, 'programa' => $programa, 'objetivo' => $objetivo, 'inicio' => $inicio,
+        'marketing' => $marketing, 'envio_id' => $envioId, 'area_codigo' => $areaCodigo,
+        'panel' => '/admin/',
+    ] + $utm;
+    foreach (['AVISO_WEBHOOK_URL', 'SHEETS_WEBHOOK_URL'] as $variable) {
+        if (env($variable) !== '') {
+            avisarWebhook(env($variable), $resumen);
+        }
     }
 }
 
@@ -238,6 +278,7 @@ if (cw_activo()) {
             'version'        => $version,
             'pagina'         => $pagina,
             'utm'            => $utm,
+            'programa'       => $programa,
         ]);
     } catch (Throwable $err) {
         error_log('CAPSUR: fallo al registrar en Chatwoot — ' . $err->getMessage());
@@ -255,6 +296,7 @@ $filas = [
     'Correo'            => $correo,
     'WhatsApp'          => $whatsapp !== '' ? $whatsapp : '—',
     'Área de interés'   => $area,
+    'Programa que vio'  => $programa !== '' ? $programa : '—',
     'Qué busca'         => $objetivo,
     'Cuándo empezar'    => $inicio,
     'Acepta marketing'  => $marketing ? 'Sí' : 'No',
@@ -341,8 +383,46 @@ try {
     $mail->AltBody = $cuerpoTexto;
 
     $mail->send();
-
     $marcar('enviado');
+
+    // Confirmación a la persona, con lo que pidió (CORREO_CONFIRMACION=0 la apaga).
+    // Si falla, no cambia nada: su solicitud ya llegó al equipo.
+    if (env('CORREO_CONFIRMACION', '1') !== '0' && !empty($leadNuevo)) {
+        try {
+            $mail->clearAllRecipients();
+            $mail->clearReplyTos();
+            $mail->addAddress($correo, $nombre);
+            if (($responder = trim(explode(',', env('MAIL_TO'))[0] ?? '')) !== '') {
+                $mail->addReplyTo($responder);
+            }
+            $resumenVisitante = array_filter([
+                'Área de interés' => $area,
+                'Programa'        => $programa,
+                'Qué buscas'      => $objetivo,
+                'Cuándo empezar'  => $inicio,
+            ]);
+            $lista = '';
+            foreach ($resumenVisitante as $etiqueta => $valor) {
+                $lista .= '<li style="margin:4px 0"><strong>' . $e($etiqueta) . ':</strong> ' . $e($valor) . '</li>';
+            }
+            $nombrePila = explode(' ', $nombre)[0];
+            $mail->Subject = 'Recibimos tu solicitud — CAPSUR';
+            $mail->Body = '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#1a202c">'
+                . '<div style="background:#0A2A63;padding:20px 24px;border-radius:10px 10px 0 0"><h1 style="margin:0;color:#fff;font-size:19px">¡Gracias, ' . $e($nombrePila) . '!</h1></div>'
+                . '<div style="background:#fff;border:1px solid #e2e8f0;border-top:0;border-radius:0 0 10px 10px;padding:20px 24px;font-size:14px;line-height:1.6">'
+                . '<p style="margin-top:0">Recibimos tu solicitud de orientación. Un asesor de CAPSUR revisará tus respuestas y te contactará con las alternativas que mejor encajen contigo.</p>'
+                . '<ul style="padding-left:18px">' . $lista . '</ul>'
+                . '<p style="color:#718096;font-size:12px;margin-bottom:0">Si no fuiste tú, ignora este correo o respóndelo y borraremos tus datos.</p>'
+                . '</div></div>';
+            $mail->AltBody = "¡Gracias, {$nombrePila}!\n\nRecibimos tu solicitud de orientación. Un asesor de CAPSUR te contactará pronto.\n\n"
+                . implode("\n", array_map(static fn ($k, $v) => "{$k}: {$v}", array_keys($resumenVisitante), $resumenVisitante))
+                . "\n\nSi no fuiste tú, responde este correo y borraremos tus datos.\n";
+            $mail->send();
+        } catch (Exception $errConfirmacion) {
+            error_log('CAPSUR: no salió la confirmación al visitante — ' . $mail->ErrorInfo);
+        }
+    }
+
     responder(200, ['ok' => true]);
 } catch (Exception $err) {
     error_log('CAPSUR: fallo SMTP — ' . $mail->ErrorInfo);

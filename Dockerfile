@@ -20,7 +20,9 @@
 # ══════════════════════════════════════════════════════════════
 
 # ── 1. Build del frontend ─────────────────────────────────────
-FROM node:22-alpine AS build
+# Imágenes fijadas por digest: la misma versión exacta en cada construcción.
+# Dependabot (.github/dependabot.yml) propone las actualizaciones.
+FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a AS build
 WORKDIR /app
 
 # Variables públicas del frontend: quedan dentro del JavaScript compilado.
@@ -44,13 +46,14 @@ RUN npm run build
 
 
 # ── 2. PHPMailer ──────────────────────────────────────────────
-FROM composer:2.8 AS phpmailer
+FROM composer:2.8@sha256:5248900ab8b5f7f880c2d62180e40960cd87f60149ec9a1abfd62ac72a02577c AS phpmailer
 WORKDIR /deps
-RUN composer require --no-interaction --no-progress --prefer-dist phpmailer/phpmailer:6.9.3
+RUN composer require --no-interaction --no-progress --prefer-dist phpmailer/phpmailer:6.9.3 \
+ && composer audit --no-interaction
 
 
 # ── 3. Apache + PHP ───────────────────────────────────────────
-FROM php:8.3-apache
+FROM php:8.3-apache@sha256:a800bbd2c0aa322702259ed475556b2cbc311076a8d3c4bba9bfe96838745472
 
 RUN a2enmod rewrite headers expires \
  && mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
@@ -79,7 +82,7 @@ EXPOSE 80
 
 # El HTTPS lo pone Traefik delante; aquí se comprueba solo que Apache y PHP responden.
 HEALTHCHECK --interval=30s --timeout=5s \
-  CMD php -r 'exit(@file_get_contents("http://127.0.0.1/") === false ? 1 : 0);'
+  CMD php -r 'exit(@file_get_contents("http://127.0.0.1/api/salud.php") === false ? 1 : 0);'
 
 ENTRYPOINT ["capsur-entrypoint"]
 CMD ["apache2-foreground"]

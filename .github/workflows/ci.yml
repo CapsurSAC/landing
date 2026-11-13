@@ -43,6 +43,14 @@ jobs:
       - name: Imagen Docker
         run: docker build -t capsur-landing:ci .
 
+      - name: Fallos de seguridad conocidos en la imagen (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: capsur-landing:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
       - name: Levantar la imagen
         run: |
           docker run -d --name capsur -p 8099:80 \

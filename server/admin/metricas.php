@@ -174,6 +174,45 @@ $recuperables = array_values(array_filter($visitas, static fn (array $v) =>
     $v['estado'] === 'a_medias' && !empty($v['consintio']) && (!empty($v['correo']) || !empty($v['nombre']))
 ));
 usort($recuperables, static fn (array $a, array $b): int => strcmp($b['ultima'] ?? '', $a['ultima'] ?? ''));
+// Quien vuelve otro día trae el mismo borrador: se muestra una sola vez, la más reciente.
+$vistos = [];
+$recuperables = array_values(array_filter($recuperables, static function (array $v) use (&$vistos): bool {
+    $clave = $v['borrador'] ?? '';
+    if ($clave === '') return true;
+    if (isset($vistos[$clave])) return false;
+    return $vistos[$clave] = true;
+}));
+
+// ── Prueba A/B del titular: visitas y leads por variante ───────────────────
+$porVariante = [];
+foreach ($visitas as $v) {
+    if (!empty($v['variante'])) {
+        $porVariante[$v['variante']]['v'] = ($porVariante[$v['variante']]['v'] ?? 0) + 1;
+        $porVariante[$v['variante']]['l'] = ($porVariante[$v['variante']]['l'] ?? 0) + (!empty($v['envio']) ? 1 : 0);
+    }
+}
+ksort($porVariante);
+
+// ── Core Web Vitals: percentil 75, como las evalúa Google ──────────────────
+$p75 = static function (array $valores): ?float {
+    $valores = array_values(array_filter($valores, static fn ($x) => $x !== null));
+    if (!$valores) return null;
+    sort($valores);
+    return (float) $valores[(int) floor(0.75 * (count($valores) - 1))];
+};
+$vitales = [];
+foreach (['escritorio', 'tablet', 'movil'] as $d) {
+    $deEste = array_filter($visitas, static fn ($v) => ($v['dispositivo'] ?? '') === $d);
+    $vitales[$d] = [
+        'n'   => count(array_filter($deEste, static fn ($v) => isset($v['lcp']))),
+        'lcp' => $p75(array_map(static fn ($v) => $v['lcp'] ?? null, $deEste)),
+        'cls' => $p75(array_map(static fn ($v) => $v['cls'] ?? null, $deEste)),
+        'inp' => $p75(array_map(static fn ($v) => $v['inp'] ?? null, $deEste)),
+    ];
+}
+// Umbrales de Google: bueno / mejorable / malo
+$calificar = static fn (?float $x, float $bueno, float $malo): string =>
+    $x === null ? '—' : ($x <= $bueno ? 'Bueno' : ($x <= $malo ? 'Mejorable' : 'Malo'));
 
 // ── Clics ──────────────────────────────────────────────────────────────────
 $porElemento = []; $porSeccion = []; $clicsTotal = 0;
@@ -418,6 +457,43 @@ header('Content-Type: text/html; charset=utf-8');
         </tbody>
       </table>
       <?php endif; ?>
+    </div>
+
+    <div class="dos">
+      <div>
+        <h2>Velocidad real <small>percentil 75 de las visitas · umbrales de Google</small></h2>
+        <div class="tabla">
+          <table>
+            <thead><tr><th>Dispositivo</th><th class="num">Visitas medidas</th><th class="num">LCP (carga)</th><th class="num">CLS (saltos)</th><th class="num">INP (respuesta)</th></tr></thead>
+            <tbody>
+            <?php foreach ($vitales as $d => $x): ?>
+              <tr>
+                <td><?= $e(ucfirst($d === 'movil' ? 'móvil' : $d)) ?></td>
+                <td class="num"><?= $x['n'] ?></td>
+                <td class="num"><?= $x['lcp'] === null ? '—' : $e(number_format($x['lcp'] / 1000, 1) . ' s · ' . $calificar($x['lcp'], 2500, 4000)) ?></td>
+                <td class="num"><?= $x['cls'] === null ? '—' : $e(number_format($x['cls'], 2) . ' · ' . $calificar($x['cls'], 0.1, 0.25)) ?></td>
+                <td class="num"><?= $x['inp'] === null ? '—' : $e((int) $x['inp'] . ' ms · ' . $calificar($x['inp'], 200, 500)) ?></td>
+              </tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <h2>Prueba del titular <small>leads por variante (src/data/contenido.js)</small></h2>
+        <div class="tabla">
+          <?php if (!$porVariante): ?><div class="vacio">No hay ninguna prueba en curso.</div><?php else: ?>
+          <table>
+            <thead><tr><th>Variante</th><th class="num">Visitas</th><th class="num">Leads</th><th class="num">Conversión</th></tr></thead>
+            <tbody>
+            <?php foreach ($porVariante as $id => $x): ?>
+              <tr><td><?= $e($id) ?></td><td class="num"><?= $x['v'] ?></td><td class="num"><?= $x['l'] ?></td><td class="num"><?= $x['v'] ? $e(number_format(100 * $x['l'] / $x['v'], 1)) . '%' : '—' ?></td></tr>
+            <?php endforeach; ?>
+            </tbody>
+          </table>
+          <?php endif; ?>
+        </div>
+      </div>
     </div>
 
     <h2>Se quedaron a medias y autorizaron el contacto <small><?= count($recuperables) ?> personas</small></h2>

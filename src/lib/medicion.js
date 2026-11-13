@@ -21,6 +21,8 @@
  */
 import { idBorrador } from './borrador.js';
 import { nuevoId } from './uuid.js';
+import { VARIANTE } from './variante.js';
+import { iniciarVitales, vitales } from './vitales.js';
 
 const ENDPOINT = '/api/metricas.php';
 const MODO_MAPA = new URLSearchParams(location.search).get('mapa');
@@ -153,6 +155,7 @@ function salida() {
     scroll: scrollMax,
     tiempo: segundos(tiempoActivo),
     secciones: Object.fromEntries(Object.entries(tiempoSeccion).map(([k, v]) => [k, segundos(v)])),
+    ...vitales(),
   });
   enviar();
 }
@@ -199,7 +202,9 @@ export function iniciarMedicion() {
     alto: innerHeight,
     idioma: navigator.language,
     recurrente: recurrente(),
+    variante: VARIANTE?.id ?? '',
   });
+  iniciarVitales();
 
   document.addEventListener(
     'click',

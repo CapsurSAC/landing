@@ -64,3 +64,23 @@ export function registrarEvento(nombre, datos = {}) {
   window.fbq?.('track', nombre, datos);
   window.gtag?.('event', EVENTOS_GA4[nombre] ?? nombre, datos);
 }
+
+/**
+ * Página de gracias: al enviar, la dirección pasa a /gracias sin recargar, y
+ * se avisa una vista de página a Meta y GA4. Así se puede medir la conversión
+ * por URL (una "conversión personalizada" en Meta con la URL /gracias).
+ */
+export function verGracias() {
+  if (location.pathname === '/gracias') return;
+  history.pushState({ gracias: true }, '', '/gracias');
+  window.fbq?.('track', 'PageView');
+  window.gtag?.('event', 'page_view', {
+    page_location: location.href,
+    page_title: 'Gracias',
+  });
+}
+
+/** Vuelve a la dirección del formulario ("Enviar otra solicitud"). */
+export function salirDeGracias() {
+  if (location.pathname === '/gracias') history.replaceState(null, '', '/');
+}

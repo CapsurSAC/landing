@@ -1,6 +1,8 @@
 import { RUTA_FOTOS } from '../data/programas.js';
 import { RUTA_LOGOS } from '../data/instituciones.js';
-import { IconoCheck, IconoFlecha } from './Iconos.jsx';
+import { enlacePrograma, WHATSAPP } from '../lib/whatsapp.js';
+import { IconoCheck, IconoCompartir, IconoFlecha, IconoWhatsApp } from './Iconos.jsx';
+import '../styles/programas.css';
 
 /**
  * Formulario del inicio, con el área ya marcada si el programa tiene una sola
@@ -9,15 +11,45 @@ import { IconoCheck, IconoFlecha } from './Iconos.jsx';
 const urlFormulario = (p) =>
   `/?${new URLSearchParams(p.area ? { area: p.area, programa: p.id } : { programa: p.id })}#formulario`;
 
+/** Dirección para compartir un programa: abre programas.html y baja hasta él. */
+export const urlCompartir = (p) => `${location.origin}/programas?ver=${p.id}`;
+
+/** Compartir con el menú del teléfono; en computadora, por WhatsApp. */
+async function compartir(p) {
+  const datos = {
+    title: `${p.titulo} — ${p.institucion}`,
+    text: `Mira este programa de ${p.institucion}: ${p.titulo}`,
+    url: urlCompartir(p),
+  };
+  if (navigator.share) {
+    try {
+      await navigator.share(datos);
+      return;
+    } catch {
+      return; // canceló el menú: no hace falta nada más
+    }
+  }
+  window.open(
+    `https://wa.me/?text=${encodeURIComponent(`${datos.text}\n${datos.url}`)}`,
+    '_blank',
+    'noopener',
+  );
+}
+
 /**
  * Una fila por institución con el detalle de su oferta, tal como viene en el
  * PDF de CAPSUR. "Me interesa" lleva al formulario del inicio.
  */
-export default function Programas({ programas }) {
+export default function Programas({ programas, destacado = null }) {
   return (
     <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-1 xl:gap-3">
       {programas.map((p) => (
-        <li key={p.id} className="programa">
+        <li
+          key={p.id}
+          id={`programa-${p.id}`}
+          className="programa"
+          data-destacado={p.id === destacado ? '' : undefined}
+        >
           <div className="programa__foto">
             <img
               src={`${RUTA_FOTOS}/${p.foto}`}
@@ -42,6 +74,12 @@ export default function Programas({ programas }) {
           <div className="programa__texto">
             <h2 className="text-[16px] leading-snug font-extrabold text-navy-900">{p.titulo}</h2>
             <p className="mt-1 text-[13px] leading-snug text-gris-texto">{p.descripcion}</p>
+            {(p.duracion || p.modalidad) && (
+              <p className="mt-2 flex flex-wrap gap-1.5">
+                {p.duracion && <span className="programa__dato">{p.duracion}</span>}
+                {p.modalidad && <span className="programa__dato">{p.modalidad}</span>}
+              </p>
+            )}
           </div>
 
           <ul className={`programa__puntos ${p.enColumnas ? 'grid grid-cols-2 gap-x-4' : ''}`}>
@@ -58,16 +96,41 @@ export default function Programas({ programas }) {
             ))}
           </ul>
 
-          <a
-            href={urlFormulario(p)}
-            className="programa__boton"
-            data-medir={`Me interesa: ${p.institucion}`}
-          >
-            <span>
-              Me interesa <span className="block">{p.institucion}</span>
-            </span>
-            <IconoFlecha className="size-4 shrink-0" />
-          </a>
+          <div className="programa__acciones">
+            <a
+              href={urlFormulario(p)}
+              className="programa__boton"
+              data-medir={`Me interesa: ${p.institucion}`}
+            >
+              <span>
+                Me interesa <span className="block">{p.institucion}</span>
+              </span>
+              <IconoFlecha className="size-4 shrink-0" />
+            </a>
+            <div className="programa__secundarias">
+              {WHATSAPP && (
+                <a
+                  href={enlacePrograma(p)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="programa__secundaria"
+                  data-medir={`WhatsApp programa: ${p.institucion}`}
+                >
+                  <IconoWhatsApp className="size-4 text-emerald-500" />
+                  Preguntar
+                </a>
+              )}
+              <button
+                type="button"
+                className="programa__secundaria"
+                onClick={() => compartir(p)}
+                data-medir={`Compartir: ${p.institucion}`}
+              >
+                <IconoCompartir className="size-4" />
+                Compartir
+              </button>
+            </div>
+          </div>
         </li>
       ))}
     </ul>

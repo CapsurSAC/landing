@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useValidacionAccesible } from '../hooks/useValidacionAccesible.js';
-import { registrarEvento } from '../lib/analitica.js';
+import { registrarEvento, salirDeGracias, verGracias } from '../lib/analitica.js';
+import { HORARIO, URL_AGENDA } from '../data/contenido.js';
+import { enHorario } from '../lib/horario.js';
 import { medirFormulario, registrar } from '../lib/medicion.js';
-import { leerOrigen, prefijoOrigen } from '../lib/origen.js';
+import { leerOrigen } from '../lib/origen.js';
+import { enlaceWhatsApp, WHATSAPP } from '../lib/whatsapp.js';
 import {
   borrarBorrador,
   cancelarSincronizacion,
@@ -25,6 +28,7 @@ import {
 import {
   IconoAlerta,
   IconoBirrete,
+  IconoCalendario,
   IconoCheck,
   IconoEnviar,
   IconoReloj,
@@ -32,6 +36,7 @@ import {
   IconoUsuario,
   IconoWhatsApp,
 } from './Iconos.jsx';
+import '../styles/formulario.css';
 
 /**
  * Adónde se envían las solicitudes. Por defecto, el PHP propio de server/.
@@ -39,42 +44,6 @@ import {
  * (https://formspree.io/f/xxxxxxxx) si no hay servidor con PHP. Ver README.
  */
 const ENDPOINT = import.meta.env.VITE_FORM_ENDPOINT || '/api/enviar.php';
-
-/** WhatsApp de atención (solo dígitos). Vacío = sin botón de WhatsApp. */
-const WHATSAPP = (import.meta.env.VITE_WHATSAPP_NUMERO || '').replace(/\D/g, '');
-
-/**
- * Enlace de WhatsApp con un mensaje ya escrito que lleva las respuestas del
- * formulario, para que el asesor las tenga a la vista al atender.
- * La línea "Ref: EM1-COMP" (origen-área) es la que lee el flujo de Chatwoot
- * para elegir la rama; si la persona la borra, el flujo la reconoce igual por
- * la frase "acabo de enviar el formulario de CAPSUR".
- *
- * El flujo busca "-COMP", "-MIN"… en cualquier parte del mensaje: por eso al
- * nombre se le quitan los guiones y el correo no viaja aquí (ya está en el
- * correo interno y en el panel).
- *
- * `enviado` es false cuando el servidor falló: el mensaje lo dice, porque en
- * ese caso las respuestas solo llegan por aquí.
- */
-const enlaceWhatsApp = (ultimo, enviado = true) => {
-  const nombre = (ultimo?.nombre ?? '').replace(/[-*_~\s]+/g, ' ').trim();
-  const saludo = enviado
-    ? 'Hola, acabo de enviar el formulario de CAPSUR y quisiera recibir orientación.'
-    : 'Hola, intenté enviar el formulario de CAPSUR y no se pudo. Quisiera recibir orientación.';
-  const respuestas = [
-    ['Nombre', nombre],
-    ['Área de interés', ultimo?.area],
-    ['Programa', ultimo?.programa],
-    ['Objetivo', ultimo?.objetivo],
-    ['Inicio', ultimo?.inicio],
-  ]
-    .filter(([, valor]) => valor)
-    .map(([etiqueta, valor]) => `*${etiqueta}:* ${valor}`);
-  const referencia = `Ref: ${prefijoOrigen()}-${ultimo?.codigo ?? 'GEN'}`;
-  const texto = [saludo, respuestas.join('\n'), referencia].filter(Boolean).join('\n\n');
-  return `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(texto)}`;
-};
 
 /** Lo que se guarda del formulario a medio llenar (la autorización no: se marca cada vez). */
 const CAMPOS_BORRADOR = ['area', 'objetivo', 'inicio', 'nombre', 'email', 'whatsapp'];
@@ -96,9 +65,9 @@ const leerPrograma = () => {
     return '';
   }
 };
-const guardarPrograma = (nombre) => {
+const guardarPrograma = (id) => {
   try {
-    if (nombre) sessionStorage.setItem(CLAVE_PROGRAMA, nombre);
+    if (id) sessionStorage.setItem(CLAVE_PROGRAMA, id);
     else sessionStorage.removeItem(CLAVE_PROGRAMA);
   } catch {
     // Sin almacenamiento: el programa solo vale hasta recargar.
@@ -188,7 +157,11 @@ export default function FormularioLead() {
   const [celularFalso, setCelularFalso] = useState(false); // elige el mensaje de error del WhatsApp
   const [areaDeEnlace, setAreaDeEnlace] = useState(false); // llegó con ?area= desde programas.html
   // El programa que miraba al tocar "Me interesa" (programas.html): el asesor sabe de qué hablarle.
-  const [programa, setPrograma] = useState(leerPrograma);
+  const [programaId, setProgramaId] = useState(leerPrograma);
+  const programaElegido = PROGRAMAS.find((p) => p.id === programaId);
+  const programa = programaElegido
+    ? `${programaElegido.institucion} — ${programaElegido.titulo}`
+    : '';
   const envioId = useRef(null); // se renueva solo cuando un envío sale bien
   const contenedorTurnstile = useRef(null);
   const turnstile = useRef({ token: '', widget: null });
@@ -222,9 +195,8 @@ export default function FormularioLead() {
       history.replaceState(history.state, '', url);
       const elegido = PROGRAMAS.find((p) => p.id === idPrograma);
       if (elegido) {
-        const nombre = `${elegido.institucion} — ${elegido.titulo}`;
-        guardarPrograma(nombre);
-        setPrograma(nombre);
+        guardarPrograma(elegido.id);
+        setProgramaId(elegido.id);
       }
     }
     // El navegador no baja solo: cuando leyó el #formulario, React aún no lo había pintado.
@@ -335,7 +307,16 @@ export default function FormularioLead() {
     const objetivo = etiquetaDe(OBJETIVOS, datos.objetivo);
     const inicio = etiquetaDe(INICIOS, datos.inicio);
     // Antes de enviar: si el servidor falla, el enlace de WhatsApp del aviso de error también las lleva.
-    setUltimo({ nombre: datos.nombre, area, programa, objetivo, inicio, codigo: codigoArea });
+    setUltimo({
+      nombre: datos.nombre,
+      area,
+      programa,
+      objetivo,
+      inicio,
+      codigo: codigoArea,
+      brochure: programaElegido?.brochure ?? '',
+      institucion: programaElegido?.institucion ?? '',
+    });
 
     setEstado('enviando');
     try {
@@ -389,7 +370,8 @@ export default function FormularioLead() {
       registrarEvento('Lead', { content_category: area });
       registrar({ tipo: 'envio' });
       guardarPrograma('');
-      setPrograma('');
+      setProgramaId('');
+      verGracias();
       setEstado('exito');
       formulario.reset();
       setSeleccion({ area: '', objetivo: '', inicio: '' });
@@ -430,13 +412,43 @@ export default function FormularioLead() {
           )}
           {WHATSAPP && (
             <p className="mt-2 text-[13px] text-gris-texto">
-              Tus respuestas ya van escritas en el mensaje: solo toca enviar. Te responde un asesor
-              en minutos, en horario de atención.
+              Tus respuestas ya van escritas en el mensaje: solo toca enviar.{' '}
+              {HORARIO
+                ? enHorario(HORARIO)
+                  ? 'Te responde un asesor en minutos.'
+                  : `Te respondemos en nuestro horario de atención: ${HORARIO.texto}.`
+                : 'Te responde un asesor en minutos, en horario de atención.'}
             </p>
+          )}
+          {URL_AGENDA && (
+            <a
+              href={URL_AGENDA}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-medir="Agendar llamada"
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-navy-900 px-5 py-3 text-[15px] font-bold text-navy-900 transition-colors hover:bg-navy-900 hover:text-white"
+            >
+              <IconoCalendario className="size-5" />
+              Prefiero agendar una llamada
+            </a>
+          )}
+          {ultimo?.brochure && (
+            <a
+              href={ultimo.brochure}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-medir={`Brochure: ${ultimo.institucion}`}
+              className="mt-4 text-[14px] font-bold text-brand-600 underline underline-offset-2 hover:text-navy-900"
+            >
+              Descarga el brochure de {ultimo.institucion}
+            </a>
           )}
           <button
             type="button"
-            onClick={() => setEstado('inicial')}
+            onClick={() => {
+              salirDeGracias();
+              setEstado('inicial');
+            }}
             className={`${WHATSAPP ? 'mt-4' : 'mt-7'} rounded-xl border-2 border-brand-600 px-6 py-3 text-[15px] font-bold text-brand-600 transition-colors hover:bg-brand-600 hover:text-white`}
           >
             Enviar otra solicitud

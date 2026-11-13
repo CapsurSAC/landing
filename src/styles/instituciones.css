@@ -1,0 +1,176 @@
+@reference '../index.css';
+
+/* El mismo orden de capas que index.css, por si esta hoja se carga antes. */
+@layer theme, base, components, utilities;
+
+/* ───────────────────────────────────────────────────────────
+   Tarjetas de instituciones: se voltean para contar qué se estudia.
+   Toda la animación vive aquí; el componente solo pone clases y dos
+   atributos: data-abierta (tarjeta volteada) y data-vista (la
+   rejilla ya entró en pantalla).
+   ─────────────────────────────────────────────────────────── */
+@keyframes asomo {
+  0%,
+  100% {
+    transform: perspective(1000px) rotateY(0deg);
+  }
+  45% {
+    transform: perspective(1000px) rotateY(24deg);
+  }
+}
+
+@layer components {
+  /* En celular las tarjetas pasan de lado, con la siguiente asomando.
+     El margen negativo las lleva hasta el borde de la pantalla. */
+  .rejilla-inst {
+    @apply -mx-5 mt-2 flex snap-x snap-mandatory gap-3 overflow-x-auto overflow-y-hidden px-5 py-4;
+    scroll-padding-inline: 1.25rem;
+    scrollbar-width: none;
+  }
+  .rejilla-inst::-webkit-scrollbar {
+    display: none;
+  }
+
+  .volteo {
+    @apply grid w-[15.5rem] shrink-0 snap-start;
+    perspective: 1000px;
+  }
+
+  /* Desde tablet: 3 por fila, todas del alto de la más alta */
+  @media (min-width: 40rem) {
+    .rejilla-inst {
+      @apply mx-0 grid grid-cols-6 overflow-visible px-0 py-2;
+      grid-auto-rows: 1fr;
+    }
+    .volteo {
+      @apply col-span-2 w-auto;
+    }
+  }
+  /* La que queda sola en la última fila va al centro */
+  @media (min-width: 40rem) and (max-width: 79.99rem) {
+    .volteo:last-child:nth-child(3n + 1) {
+      grid-column-start: 3;
+    }
+  }
+  /* Pantallas anchas: 4 por fila; si la última fila tiene 3, se centra */
+  @media (min-width: 80rem) {
+    .rejilla-inst {
+      @apply grid-cols-8;
+    }
+    .volteo:nth-last-child(3):nth-child(4n + 1) {
+      grid-column-start: 2;
+    }
+  }
+
+  /* Lo que gira. Las dos caras ocupan la misma celda, así la tarjeta
+     mide lo que su cara más alta. Volver es más rápido que abrir. */
+  .volteo__giro {
+    display: grid;
+    transform-style: preserve-3d;
+    transition:
+      transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      scale 0.15s ease-out;
+  }
+  .volteo[data-abierta] .volteo__giro {
+    transform: rotateY(180deg);
+    transition:
+      transform 0.65s cubic-bezier(0.3, 1.25, 0.5, 1),
+      scale 0.15s ease-out;
+  }
+  .volteo__giro:active {
+    scale: 0.97;
+  }
+
+  .volteo__cara {
+    @apply relative cursor-pointer rounded-2xl p-3.5;
+    grid-area: 1 / 1;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    touch-action: manipulation;
+  }
+
+  .volteo__frente {
+    @apply flex min-h-44 flex-col items-center justify-center gap-3 border border-brand-500/25
+           bg-white text-center shadow-md shadow-navy-900/5 transition-colors duration-200;
+    transform: rotateY(0deg);
+  }
+
+  .volteo__reverso {
+    @apply flex flex-col gap-2 text-left text-white shadow-lg shadow-navy-900/25;
+    background: linear-gradient(155deg, var(--color-navy-700), var(--color-navy-900) 70%);
+    transform: rotateY(180deg);
+  }
+
+  /* Círculo con las flechas: avisa que la tarjeta gira (frente) y cierra (reverso) */
+  .volteo__pista {
+    @apply absolute top-2 right-2 grid size-7 place-items-center rounded-full bg-lavanda
+           text-brand-600 transition-colors duration-200;
+  }
+  .volteo__pista svg {
+    @apply size-3.5 transition-transform duration-500;
+  }
+  .volteo__cerrar {
+    @apply cursor-pointer bg-white/10 text-amarillo;
+  }
+  /* Amplía la zona táctil del botón sin agrandar el círculo */
+  .volteo__cerrar::after {
+    content: '';
+    @apply absolute -inset-2;
+  }
+  .volteo__cerrar:focus-visible {
+    outline-color: var(--color-amarillo);
+    border-radius: 9999px;
+  }
+
+  .volteo__nombre {
+    @apply pr-8 text-[14px] leading-tight font-extrabold;
+  }
+  .volteo__tipo {
+    @apply -mt-1 text-[12px] leading-snug font-semibold text-amarillo;
+  }
+  .volteo__lista {
+    @apply flex flex-col gap-1 text-[12px] leading-snug;
+  }
+  .volteo__lista li {
+    @apply relative pl-3;
+  }
+  .volteo__lista li::before {
+    content: '';
+    @apply absolute top-[0.55em] left-0 size-1 rounded-full bg-amarillo;
+  }
+  .volteo__modalidad {
+    @apply mt-auto flex items-center gap-1.5 border-t border-white/15 pt-2 text-[12px] font-semibold;
+  }
+
+  /* Reacción previa al clic: el borde se marca y las flechas giran */
+  .volteo__frente:focus-visible {
+    @apply rounded-2xl border-brand-500;
+  }
+  @media (hover: hover) {
+    .volteo:hover .volteo__frente {
+      @apply border-brand-500/70;
+    }
+    .volteo:hover .volteo__frente .volteo__pista {
+      @apply bg-brand-600 text-white;
+    }
+    .volteo:hover .volteo__cerrar {
+      @apply bg-white/20;
+    }
+    .volteo:hover .volteo__pista svg {
+      transform: rotate(180deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    /* La tarjeta se inclina hacia donde va a girar */
+    @media (hover: hover) {
+      .volteo:not([data-abierta]):hover .volteo__giro {
+        transform: rotateY(12deg);
+      }
+    }
+    /* Va en el <li> y no en lo que gira, para que no se repita al cerrar */
+    .rejilla-inst[data-vista] .volteo {
+      animation: asomo 0.9s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--orden, 0) * 80ms + 200ms);
+    }
+  }
+}

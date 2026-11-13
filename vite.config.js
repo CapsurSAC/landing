@@ -12,6 +12,20 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       {
+        // En desarrollo, /programas y /programas/<categoría> sirven programas.html,
+        // igual que hace Apache en producción (docker/apache-capsur.conf).
+        name: 'rutas-programas',
+        configureServer(servidor) {
+          servidor.middlewares.use((pedido, _respuesta, siguiente) => {
+            const [ruta, consulta = ''] = (pedido.url ?? '').split('?');
+            if (/^\/programas(\/[a-z-]+)?\/?$/.test(ruta)) {
+              pedido.url = '/programas.html' + (consulta ? '?' + consulta : '');
+            }
+            siguiente();
+          });
+        },
+      },
+      {
         // Vite deja %VITE_X% tal cual si la variable no existe; esto garantiza
         // que og:image quede relativa en vez de romperse.
         name: 'url-sitio-en-html',
@@ -19,9 +33,9 @@ export default defineConfig(({ mode }) => {
       },
     ],
 
-  // Rutas relativas en el build: así la carpeta dist/ funciona tanto en la raíz
-  // del dominio como dentro de un subdirectorio de cPanel.
-  base: './',
+  // Rutas absolutas: /programas/capacitacion es una página y sus archivos se
+  // piden desde la raíz. El sitio vive en la raíz del dominio.
+  base: '/',
 
   build: {
     outDir: 'dist',

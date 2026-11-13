@@ -69,6 +69,9 @@
     # por error, que al menos no se puedan abrir ni ejecutar por URL.
     RewriteRule ^(config|storage|vendor)(/|$) - [R=404,L]
 
+    # /programas y /programas/<categoría> son la página de programas
+    RewriteRule ^programas(/[a-z-]+)?/?$ /programas.html [L]
+
     # Todo lo que no sea un archivo real ni esté bajo /api o /admin va al index.html
     RewriteCond %{REQUEST_URI} !^/(api|admin)/
     RewriteCond %{REQUEST_FILENAME} !-f

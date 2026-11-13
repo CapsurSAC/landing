@@ -132,3 +132,12 @@ export const IconoVolver = ({ className = '' }) => (
     <path d="M19 12H5M12 19l-7-7 7-7" />
   </svg>
 );
+
+export const IconoCompartir = ({ className = '' }) => (
+  <svg viewBox="0 0 24 24" className={className} {...base}>
+    <circle cx="18" cy="5" r="3" />
+    <circle cx="6" cy="12" r="3" />
+    <circle cx="18" cy="19" r="3" />
+    <path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" />
+  </svg>
+);

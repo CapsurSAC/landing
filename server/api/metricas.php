@@ -88,6 +88,9 @@ $visita = (string) ($lote['visita'] ?? '');
 if (!preg_match('/^[0-9a-f]{8}-[0-9a-f-]{27}$/', $visita)) {
     responder(422, ['ok' => false, 'error' => 'visita']);
 }
+// Id del borrador (src/lib/borrador.js): une las visitas de quien vuelve otro día.
+$borrador = strtolower(limpiar($lote['borrador'] ?? '', 36));
+$borrador = preg_match('/^[0-9a-f-]{36}$/', $borrador) ? $borrador : '';
 $disp   = in_array($lote['dispositivo'] ?? '', $DISPOSITIVOS, true) ? $lote['dispositivo'] : 'escritorio';
 $pagina = limpiar($lote['pagina'] ?? '', 300);
 $lista  = is_array($lote['eventos'] ?? null) ? array_slice($lote['eventos'], 0, 50) : [];
@@ -169,6 +172,9 @@ foreach (['campos', 'respuestas', 'errores', 'secciones'] as $clave) {
     }
 }
 $estado['ultima'] = $ahora;
+if ($borrador !== '') {
+    $estado['borrador'] = $borrador;
+}
 if (empty($estado['so'])) {
     [$estado['so'], $estado['navegador']] = agenteCorto((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
 }
@@ -188,6 +194,9 @@ foreach ($lista as $ev) {
         $estado['alto']       = max(0, min(10000, (int) ($ev['alto'] ?? 0)));
         $estado['idioma']     = limpiar($ev['idioma'] ?? '', 10);
         $estado['recurrente'] = !empty($ev['recurrente']);
+        // Prueba A/B del titular (src/data/contenido.js)
+        $variante = preg_replace('/[^a-z0-9_-]/i', '', limpiar($ev['variante'] ?? '', 20));
+        if ($variante !== '') $estado['variante'] = $variante;
         continue;
     }
 
@@ -206,6 +215,11 @@ foreach ($lista as $ev) {
     if ($tipo === 'salida') {
         $estado['scroll'] = max((int) $estado['scroll'], max(0, min(100, (int) ($ev['scroll'] ?? 0))));
         $estado['tiempo'] = max((int) $estado['tiempo'], max(0, min(7200, (int) ($ev['tiempo'] ?? 0))));
+        // Core Web Vitals (src/lib/vitales.js): la última medida de la visita.
+        foreach (['lcp' => 60000, 'inp' => 60000] as $clave => $tope) {
+            if (($ev[$clave] ?? 0) > 0) $estado[$clave] = min($tope, (int) $ev[$clave]);
+        }
+        if (isset($ev['cls']) && is_numeric($ev['cls'])) $estado['cls'] = max(0, min(10, round((float) $ev['cls'], 3)));
         foreach ((array) ($ev['secciones'] ?? []) as $id => $seg) {
             if (in_array($id, $SECCIONES, true)) {
                 $estado['secciones'][$id] = max((int) ($estado['secciones'][$id] ?? 0), max(0, min(7200, (int) $seg)));
@@ -239,7 +253,7 @@ foreach ($lista as $ev) {
         if ($campo === 'consentimiento') {
             $estado['consintio'] = $lleno;
             if (!$lleno) {
-                unset($estado['nombre'], $estado['correo']); // retiró la autorización
+                unset($estado['nombre'], $estado['correo'], $estado['whatsapp']); // retiró la autorización
             }
         }
     }
@@ -255,6 +269,8 @@ foreach ($lista as $ev) {
         $correo = filter_var(trim(texto($ev['correo'] ?? '')), FILTER_VALIDATE_EMAIL);
         if ($nombre !== '') $estado['nombre'] = $nombre;
         if ($correo)        $estado['correo'] = $correo;
+        $celular = limpiar($ev['whatsapp'] ?? '', 20);
+        if ($celular !== '' && celularValido($celular)) $estado['whatsapp'] = $celular;
     }
 }
 

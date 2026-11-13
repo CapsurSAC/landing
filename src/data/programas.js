@@ -13,19 +13,38 @@
  */
 
 /**
- * Los cuatro enlaces de la cabecera. Cada uno abre programas.html#<id> con
- * los programas de esa categoría.
+ * Los cuatro enlaces de la cabecera. Cada uno abre /programas/<id> con los
+ * programas de esa categoría. `descripcion` va a Google y a las vistas previas.
  */
 export const CATEGORIAS = [
-  { id: 'formacion-tecnica', nombre: 'Formación Técnica' },
-  { id: 'especializacion', nombre: 'Especialización' },
-  { id: 'capacitacion', nombre: 'Capacitación' },
-  { id: 'convalidacion', nombre: 'Convalidación' },
+  {
+    id: 'formacion-tecnica',
+    nombre: 'Formación Técnica',
+    descripcion:
+      'Carreras profesionales técnicas de Sistemas del Sur, Avanti y Globalex: computación, turismo, hostelería y carreras 100 % online.',
+  },
+  {
+    id: 'especializacion',
+    nombre: 'Especialización',
+    descripcion:
+      'Diplomados y programas de especialización en minería, educación, tecnología, turismo y negocios de las instituciones de CAPSUR.',
+  },
+  {
+    id: 'capacitacion',
+    nombre: 'Capacitación',
+    descripcion:
+      'Capacitación para el trabajo: minería, SSOMA, materiales peligrosos, formación docente e idiomas online.',
+  },
+  {
+    id: 'convalidacion',
+    nombre: 'Convalidación',
+    descripcion:
+      'Continuidad de estudios y convalidación (sujeta a evaluación) en la carrera de Computación e Informática.',
+  },
 ];
 
 /** Dirección de la página de programas, filtrada si se pasa una categoría. */
-export const urlProgramas = (categoria) =>
-  categoria ? `/programas.html#${categoria}` : '/programas.html';
+export const urlProgramas = (categoria) => (categoria ? `/programas/${categoria}` : '/programas');
 
 export const PROGRAMAS = [
   {
@@ -177,4 +196,4 @@ export const PROGRAMAS = [
 ];
 
 /** Carpeta pública de las fotos de cada programa. */
-export const RUTA_FOTOS = '/programas';
+export const RUTA_FOTOS = '/fotos-programas';

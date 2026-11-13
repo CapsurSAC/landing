@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { IconoCheck } from './Iconos.jsx';
+import { VARIANTE } from '../lib/variante.js';
 
 const BENEFICIOS = [
   'Titulación y convalidación',
@@ -23,10 +24,10 @@ export default function Hero() {
       {/* ── Texto ─────────────────────────────────────────── */}
       <div className="flex h-full flex-col justify-center px-7 py-7 sm:pl-9 lg:py-6">
         <h1 className="text-[30px] leading-[1.12] font-extrabold text-balance text-white sm:text-[34px] lg:text-[32px] xl:text-[38px]">
-          ¿Cuál es tu próximo
+          {VARIANTE?.linea1 ?? '¿Cuál es tu próximo'}
           <br />
           <span className="relative inline-block whitespace-nowrap text-amarillo italic">
-            paso profesional?
+            {VARIANTE?.linea2 ?? 'paso profesional?'}
             {/* Subrayado manuscrito */}
             <svg
               viewBox="0 0 300 14"

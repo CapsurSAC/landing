@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { INSTITUCIONES, RUTA_LOGOS } from '../data/instituciones.js';
 import { IconoLaptop, IconoVoltear } from './Iconos.jsx';
+import '../styles/instituciones.css';
 
 /**
  * Cada institución es una tarjeta de dos caras: el logo por delante y, al

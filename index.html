@@ -33,6 +33,27 @@
 
     <!-- Precarga de la imagen del hero: es la candidata a LCP -->
     <link rel="preload" as="image" href="/hero-estudiantes.webp" fetchpriority="high" />
+    <!-- Datos para Google: quién es el grupo (solo datos que constan) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "EducationalOrganization",
+        "name": "Grupo CAPSUR",
+        "url": "%VITE_URL_SITIO%/",
+        "logo": "%VITE_URL_SITIO%/logos/grupo-capsur.webp",
+        "subOrganization": [
+          { "@type": "EducationalOrganization", "name": "Sistemas del Sur" },
+          { "@type": "EducationalOrganization", "name": "Sistemas del Sur Perú" },
+          { "@type": "EducationalOrganization", "name": "Avanti" },
+          { "@type": "EducationalOrganization", "name": "Cecava" },
+          { "@type": "EducationalOrganization", "name": "Matpel" },
+          { "@type": "EducationalOrganization", "name": "Magíster Capacítate" },
+          { "@type": "EducationalOrganization", "name": "Next Online" },
+          { "@type": "EducationalOrganization", "name": "Globalex" }
+        ]
+      }
+    </script>
+    <link rel="canonical" href="%VITE_URL_SITIO%/" />
   </head>
   <body>
     <div id="root"></div>

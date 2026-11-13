@@ -3,6 +3,8 @@ import Hero from './components/Hero.jsx';
 import FormularioLead from './components/FormularioLead.jsx';
 import Instituciones from './components/Instituciones.jsx';
 import PorQueCapsur from './components/PorQueCapsur.jsx';
+import Testimonios from './components/Testimonios.jsx';
+import Preguntas from './components/Preguntas.jsx';
 import Footer from './components/Footer.jsx';
 import BotonFlotante from './components/BotonFlotante.jsx';
 
@@ -29,6 +31,9 @@ export default function App() {
             <Hero />
             <Instituciones />
             <PorQueCapsur />
+            {/* Solo aparecen cuando src/data/contenido.js tiene datos confirmados. */}
+            <Testimonios />
+            <Preguntas />
           </div>
 
           <div id="formulario" className="min-w-0 lg:col-span-4">

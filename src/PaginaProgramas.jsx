@@ -5,11 +5,49 @@ import Footer from './components/Footer.jsx';
 import { IconoBirrete, IconoEnviar, IconoVolver } from './components/Iconos.jsx';
 import { CATEGORIAS, PROGRAMAS, urlProgramas } from './data/programas.js';
 
-/** La categoría va en el hash (#capacitacion); si no hay o no existe, se ven todos. */
-const categoriaDeUrl = () => {
-  const id = decodeURIComponent(location.hash.slice(1));
-  return CATEGORIAS.some((c) => c.id === id) ? id : null;
-};
+const TITULO = 'Programas por institución';
+const DESCRIPCION =
+  'Conoce algunos de los programas de las instituciones de Grupo CAPSUR: carreras técnicas, especializaciones, capacitación y convalidación.';
+
+const existe = (id) => CATEGORIAS.some((c) => c.id === id);
+
+/**
+ * La categoría va en la ruta (/programas/capacitacion). Las direcciones
+ * antiguas con #capacitacion se pasan a la ruta nueva sin recargar.
+ */
+function categoriaDeUrl() {
+  const enRuta = location.pathname.match(/^\/programas\/([a-z-]+)\/?$/)?.[1];
+  if (existe(enRuta)) return enRuta;
+  const enHash = decodeURIComponent(location.hash.slice(1));
+  if (existe(enHash)) {
+    history.replaceState(null, '', urlProgramas(enHash) + location.search);
+    return enHash;
+  }
+  return null;
+}
+
+/** Cambia una etiqueta <meta> de la cabecera (Google la lee al renderizar). */
+function ponerMeta(atributo, clave, valor) {
+  document.querySelector(`meta[${atributo}="${clave}"]`)?.setAttribute('content', valor);
+}
+
+/** Datos estructurados (schema.org) de los programas visibles, para Google. */
+function datosEstructurados(lista) {
+  return JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: lista.map((p, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      item: {
+        '@type': 'Course',
+        name: p.titulo,
+        description: p.descripcion,
+        provider: { '@type': 'EducationalOrganization', name: p.institucion },
+      },
+    })),
+  }).replace(/</g, '\\u003c'); // ningún "</script>" dentro del JSON
+}
 
 /**
  * Página de programas: el detalle del PDF de CAPSUR, con filtros que son los
@@ -17,23 +55,45 @@ const categoriaDeUrl = () => {
  */
 export default function PaginaProgramas() {
   const [categoria, setCategoria] = useState(categoriaDeUrl);
+  // Programa al que llegó un enlace compartido (?ver=matpel)
+  const [destacado] = useState(() => new URLSearchParams(location.search).get('ver'));
 
-  // Los enlaces de la cabecera y los filtros solo cambian el hash: no recargan.
+  // Los filtros cambian la ruta sin recargar; atrás/adelante también funcionan.
   useEffect(() => {
-    const alCambiar = () => {
-      setCategoria(categoriaDeUrl());
-      window.scrollTo({ top: 0 });
-    };
-    window.addEventListener('hashchange', alCambiar);
-    return () => window.removeEventListener('hashchange', alCambiar);
+    const alVolver = () => setCategoria(categoriaDeUrl());
+    window.addEventListener('popstate', alVolver);
+    return () => window.removeEventListener('popstate', alVolver);
   }, []);
 
-  const nombre = CATEGORIAS.find((c) => c.id === categoria)?.nombre;
+  const elegir = (evento, id) => {
+    if (evento.metaKey || evento.ctrlKey || evento.shiftKey || evento.button !== 0) return;
+    evento.preventDefault();
+    history.pushState(null, '', urlProgramas(id));
+    setCategoria(id);
+    window.scrollTo({ top: 0 });
+  };
+
+  const actual = CATEGORIAS.find((c) => c.id === categoria);
   const lista = categoria ? PROGRAMAS.filter((p) => p.categorias.includes(categoria)) : PROGRAMAS;
 
   useEffect(() => {
-    document.title = `${nombre ?? 'Programas por institución'} — CAPSUR`;
-  }, [nombre]);
+    const titulo = `${actual?.nombre ?? TITULO} — CAPSUR`;
+    document.title = titulo;
+    ponerMeta('name', 'description', actual?.descripcion ?? DESCRIPCION);
+    ponerMeta('property', 'og:title', titulo);
+    ponerMeta('property', 'og:description', actual?.descripcion ?? DESCRIPCION);
+    ponerMeta('property', 'og:url', location.origin + urlProgramas(categoria));
+    document
+      .querySelector('link[rel="canonical"]')
+      ?.setAttribute('href', location.origin + urlProgramas(categoria));
+  }, [actual, categoria]);
+
+  // Baja hasta el programa compartido cuando ya está pintado.
+  useEffect(() => {
+    if (destacado) {
+      document.getElementById(`programa-${destacado}`)?.scrollIntoView({ block: 'center' });
+    }
+  }, [destacado]);
 
   return (
     <div className="pantalla">
@@ -46,7 +106,7 @@ export default function PaginaProgramas() {
         </a>
 
         <h1 className="mt-3 text-center text-[24px] leading-tight font-extrabold text-navy-900 lg:text-[30px]">
-          {nombre ?? 'Programas por institución'}
+          {actual?.nombre ?? TITULO}
         </h1>
         <p className="mt-1.5 text-center text-[14px] text-gris-texto">
           Conoce algunos de los programas de cada una de nuestras instituciones.
@@ -65,18 +125,24 @@ export default function PaginaProgramas() {
         </p>
 
         <nav aria-label="Filtrar programas" className="mt-5 flex flex-wrap justify-center gap-2">
-          <a href={urlProgramas()} className="filtro" aria-current={categoria ? undefined : 'page'}>
+          <a
+            href={urlProgramas()}
+            className="filtro"
+            aria-current={categoria ? undefined : 'page'}
+            onClick={(e) => elegir(e, null)}
+          >
             Todos
           </a>
-          {CATEGORIAS.map(({ id, nombre: n }) => (
+          {CATEGORIAS.map(({ id, nombre }) => (
             <a
               key={id}
               href={urlProgramas(id)}
               className="filtro"
               aria-current={categoria === id ? 'page' : undefined}
-              data-medir={`Filtro: ${n}`}
+              data-medir={`Filtro: ${nombre}`}
+              onClick={(e) => elegir(e, id)}
             >
-              {n}
+              {nombre}
             </a>
           ))}
         </nav>
@@ -85,7 +151,12 @@ export default function PaginaProgramas() {
           {lista.length} {lista.length === 1 ? 'institución' : 'instituciones'}
         </p>
 
-        <Programas programas={lista} />
+        <Programas programas={lista} destacado={destacado} />
+
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: datosEstructurados(lista) }}
+        />
 
         <div className="mt-8 flex flex-col items-center gap-3 rounded-3xl bg-lavanda px-5 py-6 text-center">
           <p className="text-[17px] font-extrabold text-navy-900">¿No encuentras lo que buscas?</p>

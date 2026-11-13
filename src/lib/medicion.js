@@ -20,6 +20,7 @@
  * medir dibuja el mapa de calor sobre la página (exige sesión del panel).
  */
 import { idBorrador } from './borrador.js';
+import { nuevoId } from './uuid.js';
 
 const ENDPOINT = '/api/metricas.php';
 const MODO_MAPA = new URLSearchParams(location.search).get('mapa');
@@ -29,12 +30,12 @@ function idVisita() {
   try {
     let id = sessionStorage.getItem('capsur_visita');
     if (!id) {
-      id = crypto.randomUUID();
+      id = nuevoId();
       sessionStorage.setItem('capsur_visita', id);
     }
     return id;
   } catch {
-    return crypto.randomUUID();
+    return nuevoId();
   }
 }
 const VISITA = idVisita();
@@ -50,7 +51,8 @@ function recurrente() {
   }
 }
 
-const dispositivo = () => (innerWidth < 640 ? 'movil' : innerWidth < 1024 ? 'tablet' : 'escritorio');
+const dispositivo = () =>
+  innerWidth < 640 ? 'movil' : innerWidth < 1024 ? 'tablet' : 'escritorio';
 
 // ── Envío por lotes ────────────────────────────────────────────────────────
 let cola = [];
@@ -67,7 +69,10 @@ function enviar() {
     pagina: location.href,
     eventos: cola.splice(0, 50),
   });
-  const enviado = navigator.sendBeacon?.(ENDPOINT, new Blob([cuerpo], { type: 'application/json' }));
+  const enviado = navigator.sendBeacon?.(
+    ENDPOINT,
+    new Blob([cuerpo], { type: 'application/json' }),
+  );
   if (!enviado) {
     fetch(ENDPOINT, {
       method: 'POST',
@@ -158,7 +163,8 @@ function salida() {
 function describir(el) {
   const contenedor = el.closest('section, header, footer, #formulario');
   const seccion = contenedor?.id || contenedor?.tagName.toLowerCase() || 'pagina';
-  const objetivo = el.closest('a, button, input, select, textarea, label, summary, [data-medir]') || el;
+  const objetivo =
+    el.closest('a, button, input, select, textarea, label, summary, [data-medir]') || el;
   const texto =
     objetivo.dataset.medir ||
     objetivo.getAttribute('aria-label') ||
@@ -243,7 +249,8 @@ export function medirFormulario(form, { restaurado = false } = {}) {
         }
       : {};
 
-  const estaLleno = (campo) => (campo.type === 'checkbox' ? campo.checked : campo.value.trim() !== '');
+  const estaLleno = (campo) =>
+    campo.type === 'checkbox' ? campo.checked : campo.value.trim() !== '';
 
   const anotar = (campo) => {
     if (!(campo instanceof HTMLElement) || !campo.name || campo.name === '_gotcha') return;
@@ -252,7 +259,13 @@ export function medirFormulario(form, { restaurado = false } = {}) {
       campo instanceof HTMLSelectElement && campo.value
         ? { valor: campo.value, texto: campo.selectedOptions[0]?.text ?? '' }
         : {};
-    registrar({ tipo: 'campo', elemento: campo.name, lleno: estaLleno(campo), ...eleccion, ...contacto() });
+    registrar({
+      tipo: 'campo',
+      elemento: campo.name,
+      lleno: estaLleno(campo),
+      ...eleccion,
+      ...contacto(),
+    });
   };
   const alCambiar = (e) => anotar(e.target);
 
@@ -285,7 +298,9 @@ export function medirFormulario(form, { restaurado = false } = {}) {
 async function dibujarMapa(disp) {
   let datos;
   try {
-    const r = await fetch(`${ENDPOINT}?dispositivo=${encodeURIComponent(disp)}`, { credentials: 'same-origin' });
+    const r = await fetch(`${ENDPOINT}?dispositivo=${encodeURIComponent(disp)}`, {
+      credentials: 'same-origin',
+    });
     datos = await r.json();
     if (!r.ok) throw new Error(datos.error || r.status);
   } catch (err) {
@@ -299,8 +314,14 @@ async function dibujarMapa(disp) {
   lienzo.width = ancho;
   lienzo.height = alto;
   Object.assign(lienzo.style, {
-    position: 'absolute', top: '0', left: '0', width: `${ancho}px`, height: `${alto}px`,
-    pointerEvents: 'none', zIndex: '9998', mixBlendMode: 'multiply',
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    width: `${ancho}px`,
+    height: `${alto}px`,
+    pointerEvents: 'none',
+    zIndex: '9998',
+    mixBlendMode: 'multiply',
   });
   const ctx = lienzo.getContext('2d');
   const radio = 34;
@@ -318,8 +339,15 @@ async function dibujarMapa(disp) {
   const aviso = document.createElement('div');
   aviso.setAttribute('role', 'status');
   Object.assign(aviso.style, {
-    position: 'fixed', bottom: '16px', left: '16px', zIndex: '9999', background: '#0a2a63', color: '#fff',
-    padding: '10px 14px', borderRadius: '10px', font: '600 13px Montserrat, system-ui, sans-serif',
+    position: 'fixed',
+    bottom: '16px',
+    left: '16px',
+    zIndex: '9999',
+    background: '#0a2a63',
+    color: '#fff',
+    padding: '10px 14px',
+    borderRadius: '10px',
+    font: '600 13px Montserrat, system-ui, sans-serif',
     boxShadow: '0 10px 30px rgba(0,0,0,.3)',
   });
   aviso.textContent = `Mapa de calor · ${disp} · ${datos.puntos.length} clics en 30 días · míralo con una ventana de ese tamaño`;

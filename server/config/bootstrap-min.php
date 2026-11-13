@@ -96,10 +96,79 @@ function texto(mixed $valor): string
 }
 
 /**
+ * Solo peticiones del propio sitio (ORIGENES_PERMITIDOS). Si el navegador no
+ * manda Origin se usa el Referer; si no llega ninguno, se rechaza: los
+ * navegadores siempre mandan al menos uno en un POST, así que su falta
+ * delata un script. Con ORIGENES_PERMITIDOS vacío no se comprueba nada.
+ */
+function exigirOrigenPropio(): void
+{
+    $permitidos = array_filter(array_map('trim', explode(',', env('ORIGENES_PERMITIDOS'))));
+    if (!$permitidos) {
+        return;
+    }
+    $origen = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
+    if ($origen === '' || $origen === 'null') {
+        $p = parse_url((string) ($_SERVER['HTTP_REFERER'] ?? ''));
+        $origen = isset($p['scheme'], $p['host'])
+            ? $p['scheme'] . '://' . $p['host'] . (isset($p['port']) ? ':' . $p['port'] : '')
+            : '';
+    }
+    if (!in_array($origen, $permitidos, true)) {
+        responder(403, ['ok' => false, 'error' => 'Origen no permitido']);
+    }
+}
+
+/**
+ * Solo JSON. Un formulario de otro sitio solo puede mandar texto plano o
+ * urlencoded sin pasar por CORS: exigir JSON le cierra esa puerta.
+ */
+function exigirJson(): void
+{
+    $tipo = strtolower(trim(explode(';', (string) ($_SERVER['CONTENT_TYPE'] ?? ''))[0]));
+    if ($tipo !== 'application/json') {
+        responder(415, ['ok' => false, 'error' => 'Se espera JSON']);
+    }
+}
+
+/**
+ * Reglas de validación del formulario, compartidas con el navegador
+ * (src/lib/reglas.js) en reglas.json: se cambian allí y valen para los dos.
+ */
+function reglas(): array
+{
+    static $reglas = null;
+    if ($reglas === null) {
+        $reglas = json_decode((string) @file_get_contents(__DIR__ . '/reglas.json'), true);
+        if (!is_array($reglas) || !isset($reglas['celular'], $reglas['correo'], $reglas['celularInventado'])) {
+            throw new RuntimeException('CAPSUR: falta o está dañado config/reglas.json');
+        }
+    }
+    return $reglas;
+}
+
+/** El patrón tiene que calzar con todo el valor, como el atributo pattern del navegador. */
+function calzaCompleto(string $patron, string $valor): bool
+{
+    return preg_match('~^(?:' . $patron . ')$~u', $valor) === 1;
+}
+
+/** Celular peruano: 9 dígitos que empiezan con 9, con o sin +51, con espacios o guiones. */
+function celularValido(string $celular): bool
+{
+    return calzaCompleto(reglas()['celular'], $celular);
+}
+
+/** Correo con dominio terminado en punto y dos letras o más (.com, .pe…). */
+function correoValido(string $correo): bool
+{
+    return filter_var($correo, FILTER_VALIDATE_EMAIL) !== false && calzaCompleto(reglas()['correo'], $correo);
+}
+
+/**
  * Celular con el formato correcto pero evidentemente inventado: un dígito
  * repetido (911 111 111), una escalera (987 654 321, 912 345 678) o un bloque
- * repetido (987 987 987, 912 121 212, 999 888 777). Misma regla que
- * celularInventado() en src/components/FormularioLead.jsx.
+ * repetido (987 987 987, 912 121 212, 999 888 777).
  * No prueba que el número exista: solo descarta los falsos más comunes.
  */
 function celularInventado(string $celular): bool
@@ -108,13 +177,12 @@ function celularInventado(string $celular): bool
     if (!preg_match('/^9\d{8}$/', $d)) {
         return false;
     }
-    $cola = substr($d, 1);
-    return preg_match('/(\d)\1{5}/', $d) === 1
-        || str_contains('0123456789', $cola)
-        || str_contains('9876543210', $cola)
-        || preg_match('/^(\d{3})\1\1$/', $d) === 1
-        || preg_match('/^9(\d\d)\1{3}$/', $d) === 1
-        || preg_match('/^(\d)\1\1(\d)\2\2(\d)\3\3$/', $d) === 1;
+    foreach (reglas()['celularInventado'] as $patron) {
+        if (calzaCompleto($patron, $d)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**

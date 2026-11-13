@@ -7,7 +7,9 @@ import { CATEGORIAS, urlProgramas } from '../data/programas.js';
  * Fuera del inicio (`conInicio`) se suma un primer enlace para volver.
  */
 export default function Header({ actual = null, conInicio = false }) {
-  const enlaces = conInicio ? [{ id: 'inicio', nombre: 'Inicio', url: '/' }, ...CATEGORIAS] : CATEGORIAS;
+  const enlaces = conInicio
+    ? [{ id: 'inicio', nombre: 'Inicio', url: '/' }, ...CATEGORIAS]
+    : CATEGORIAS;
 
   return (
     <header className="shrink-0 bg-white">

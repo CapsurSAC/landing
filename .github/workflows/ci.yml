@@ -1,0 +1,63 @@
+# Revisión automática en cada cambio: código, pruebas, imagen Docker y
+# prueba de humo contra la imagen ya levantada. Si algo falla, no se publica.
+name: Revisión
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  revisar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dependencias
+        run: npm ci
+
+      - name: Revisión de código (ESLint)
+        run: npm run lint
+
+      - name: Formato (Prettier)
+        run: npm run formato
+
+      - name: Pruebas (reglas del formulario y datos)
+        run: npm test
+
+      - name: Dependencias con fallos de seguridad conocidos
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Construcción
+        run: npm run build
+
+      - name: Imagen Docker
+        run: docker build -t capsur-landing:ci .
+
+      - name: Levantar la imagen
+        run: |
+          docker run -d --name capsur -p 8099:80 \
+            -e ORIGENES_PERMITIDOS=http://localhost:8099 capsur-landing:ci
+          for i in $(seq 1 30); do curl -sf http://localhost:8099/ >/dev/null && break; sleep 1; done
+
+      - name: Sintaxis PHP
+        run: |
+          for f in $(docker exec capsur sh -c 'ls /var/www/html/api/*.php /var/www/html/admin/*.php /var/www/config/*.php'); do
+            docker exec capsur php -l "$f"
+          done
+
+      - name: Prueba de humo
+        run: node scripts/prueba-humo.mjs http://localhost:8099
+
+      - name: Registro del contenedor si algo falló
+        if: failure()
+        run: docker logs capsur

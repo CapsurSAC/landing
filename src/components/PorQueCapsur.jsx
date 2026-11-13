@@ -44,8 +44,13 @@ export default function PorQueCapsur() {
       {/* En pantallas grandes el icono va al lado del texto: ocupa menos alto */}
       <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-4 lg:grid-cols-4 lg:gap-y-0">
         {RAZONES.map(({ icono: Icono, color, titulo, detalle }) => (
-          <li key={titulo} className="flex flex-col items-center gap-2 text-center lg:flex-row lg:text-left">
-            <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${color}`}>
+          <li
+            key={titulo}
+            className="flex flex-col items-center gap-2 text-center lg:flex-row lg:text-left"
+          >
+            <span
+              className={`flex size-10 shrink-0 items-center justify-center rounded-full ${color}`}
+            >
               <Icono className="size-5" />
             </span>
             <span>

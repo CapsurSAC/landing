@@ -67,11 +67,8 @@ if ($metodo !== 'POST') {
 }
 
 // ── POST: eventos del navegador ────────────────────────────────────────────
-$permitidos = array_filter(array_map('trim', explode(',', env('ORIGENES_PERMITIDOS'))));
-$origen     = $_SERVER['HTTP_ORIGIN'] ?? '';
-if ($permitidos && $origen && !in_array($origen, $permitidos, true)) {
-    responder(403, ['ok' => false, 'error' => 'Origen no permitido']);
-}
+exigirOrigenPropio();
+exigirJson();
 
 $ipLimite = ipParaLimite(ipVisitante());
 if (!registrarSiCabe('metricas:' . $ipLimite, 900, 600)) {

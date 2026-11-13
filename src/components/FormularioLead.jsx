@@ -11,6 +11,8 @@ import {
   retirarPosible,
   sincronizarPosible,
 } from '../lib/borrador.js';
+import { celularInventado, PATRON_CELULAR, PATRON_CORREO } from '../lib/reglas.js';
+import { nuevoId } from '../lib/uuid.js';
 import {
   AREAS,
   INICIOS,
@@ -38,38 +40,6 @@ const ENDPOINT = import.meta.env.VITE_FORM_ENDPOINT || '/api/enviar.php';
 
 /** WhatsApp de atención (solo dígitos). Vacío = sin botón de WhatsApp. */
 const WHATSAPP = (import.meta.env.VITE_WHATSAPP_NUMERO || '').replace(/\D/g, '');
-
-/**
- * Formatos que acepta el formulario. server/api/enviar.php repite las mismas
- * reglas: si cambias una aquí, cámbiala también allá.
- *
- * Celular peruano: 9 dígitos que empiezan con 9, con o sin +51 delante, y con
- * espacios o guiones entre los dígitos. Correo: el dominio debe terminar en un
- * punto y al menos dos letras (.com, .pe…); type="email" solo no lo exige.
- */
-const PATRON_CELULAR = String.raw`\s*(\(?\+?51\)?[\s\-]?)?9([\s\-]?\d){8}\s*`;
-const PATRON_CORREO = String.raw`[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[A-Za-z]{2,}`;
-
-/**
- * Celular con el formato correcto pero evidentemente inventado: un dígito
- * repetido (911 111 111), una escalera (987 654 321, 912 345 678) o un bloque
- * repetido (987 987 987, 912 121 212, 999 888 777). Misma regla que
- * celularInventado() en server/config/bootstrap-min.php.
- * No prueba que el número exista: solo descarta los falsos más comunes.
- */
-const celularInventado = (valor) => {
-  const d = valor.replace(/\D/g, '').replace(/^51(?=\d{9}$)/, '');
-  if (!/^9\d{8}$/.test(d)) return false;
-  const cola = d.slice(1);
-  return (
-    /(\d)\1{5}/.test(d) ||
-    '0123456789'.includes(cola) ||
-    '9876543210'.includes(cola) ||
-    /^(\d{3})\1\1$/.test(d) ||
-    /^9(\d\d)\1{3}$/.test(d) ||
-    /^(\d)\1\1(\d)\2\2(\d)\3\3$/.test(d)
-  );
-};
 
 /**
  * Enlace de WhatsApp con un mensaje ya escrito que lleva las respuestas del
@@ -103,20 +73,6 @@ const enlaceWhatsApp = (ultimo, enviado = true) => {
   return `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(texto)}`;
 };
 
-/**
- * Identificador único de cada envío. Si la persona reintenta tras un error,
- * viaja el mismo: el backend lo usa para no duplicar el lead.
- */
-const nuevoEnvioId = () => {
-  if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
-  // randomUUID solo existe en HTTPS o localhost; esto cubre el resto.
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-};
-
 /** Lo que se guarda del formulario a medio llenar (la autorización no: se marca cada vez). */
 const CAMPOS_BORRADOR = ['area', 'objetivo', 'inicio', 'nombre', 'email', 'whatsapp'];
 
@@ -131,8 +87,7 @@ const tieneAlgo = (datos) => CAMPOS_BORRADOR.some((c) => datos?.[c]);
 const opcionValida = (opciones, valor) => (opciones.some((o) => o.value === valor) ? valor : '');
 
 /** Convierte el código de una opción en el texto que vio el usuario. */
-const etiquetaDe = (opciones, valor) =>
-  opciones.find((o) => o.value === valor)?.label ?? valor;
+const etiquetaDe = (opciones, valor) => opciones.find((o) => o.value === valor)?.label ?? valor;
 
 function MensajeError({ id, children }) {
   return (
@@ -146,7 +101,10 @@ function MensajeError({ id, children }) {
 function Pregunta({ numero, id, etiqueta, opciones, valor, onChange }) {
   return (
     <div>
-      <label htmlFor={id} className="mb-1.5 block text-[13.5px] leading-tight font-bold text-navy-900">
+      <label
+        htmlFor={id}
+        className="mb-1.5 block text-[13.5px] leading-tight font-bold text-navy-900"
+      >
         {numero}. {etiqueta} <span className="text-magenta">*</span>
       </label>
       <select
@@ -174,7 +132,10 @@ function Pregunta({ numero, id, etiqueta, opciones, valor, onChange }) {
 function CampoTexto({ id, etiqueta, icono, error, opcional = false, ...props }) {
   return (
     <div>
-      <label htmlFor={id} className="mb-1.5 flex items-center gap-2 text-[13.5px] leading-tight font-bold text-navy-900">
+      <label
+        htmlFor={id}
+        className="mb-1.5 flex items-center gap-2 text-[13.5px] leading-tight font-bold text-navy-900"
+      >
         <span className="text-brand-600">{icono}</span>
         {etiqueta}
         {opcional ? (
@@ -309,7 +270,8 @@ export default function FormularioLead() {
     const datos = Object.fromEntries(new FormData(formulario).entries());
     const origen = leerOrigen();
     const codigoArea = AREAS.find((a) => a.value === datos.area)?.codigo ?? 'GEN';
-    envioId.current ??= nuevoEnvioId();
+    // Si la persona reintenta tras un error viaja el mismo: el backend no duplica el lead.
+    envioId.current ??= nuevoId();
 
     const area = etiquetaDe(AREAS, datos.area);
     const objetivo = etiquetaDe(OBJETIVOS, datos.objetivo);
@@ -403,8 +365,8 @@ export default function FormularioLead() {
           )}
           {WHATSAPP && (
             <p className="mt-2 text-[13px] text-gris-texto">
-              Tus respuestas ya van escritas en el mensaje: solo toca enviar. Te responde un
-              asesor en minutos, en horario de atención.
+              Tus respuestas ya van escritas en el mensaje: solo toca enviar. Te responde un asesor
+              en minutos, en horario de atención.
             </p>
           )}
           <button
@@ -454,193 +416,202 @@ export default function FormularioLead() {
           </div>
         )}
         <div className="space-y-3 pr-1">
-        {/* Trampa para bots: fuera de pantalla, sin foco y oculta a lectores. */}
-        <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-          <label htmlFor="_gotcha">No completes este campo</label>
-          <input id="_gotcha" name="_gotcha" type="text" tabIndex={-1} autoComplete="off" />
-        </div>
+          {/* Trampa para bots: fuera de pantalla, sin foco y oculta a lectores. */}
+          <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+            <label htmlFor="_gotcha">No completes este campo</label>
+            <input id="_gotcha" name="_gotcha" type="text" tabIndex={-1} autoComplete="off" />
+          </div>
 
-        <Pregunta
-          numero={1}
-          id="area"
-          etiqueta="¿Qué área profesional te interesa?"
-          opciones={AREAS}
-          valor={seleccion.area}
-          onChange={(v) => setSeleccion((s) => ({ ...s, area: v }))}
-        />
-        <Pregunta
-          numero={2}
-          id="objetivo"
-          etiqueta="¿Qué te gustaría conseguir?"
-          opciones={OBJETIVOS}
-          valor={seleccion.objetivo}
-          onChange={(v) => setSeleccion((s) => ({ ...s, objetivo: v }))}
-        />
-        <Pregunta
-          numero={3}
-          id="inicio"
-          etiqueta="¿Cuándo te gustaría comenzar?"
-          opciones={INICIOS}
-          valor={seleccion.inicio}
-          onChange={(v) => setSeleccion((s) => ({ ...s, inicio: v }))}
-        />
+          <Pregunta
+            numero={1}
+            id="area"
+            etiqueta="¿Qué área profesional te interesa?"
+            opciones={AREAS}
+            valor={seleccion.area}
+            onChange={(v) => setSeleccion((s) => ({ ...s, area: v }))}
+          />
+          <Pregunta
+            numero={2}
+            id="objetivo"
+            etiqueta="¿Qué te gustaría conseguir?"
+            opciones={OBJETIVOS}
+            valor={seleccion.objetivo}
+            onChange={(v) => setSeleccion((s) => ({ ...s, objetivo: v }))}
+          />
+          <Pregunta
+            numero={3}
+            id="inicio"
+            etiqueta="¿Cuándo te gustaría comenzar?"
+            opciones={INICIOS}
+            valor={seleccion.inicio}
+            onChange={(v) => setSeleccion((s) => ({ ...s, inicio: v }))}
+          />
 
-        <hr className="border-slate-200" />
+          <hr className="border-slate-200" />
 
-        <CampoTexto
-          id="nombre"
-          etiqueta="Tu nombre completo"
-          icono={<IconoUsuario className="size-4" />}
-          type="text"
-          required
-          minLength={3}
-          maxLength={80}
-          autoComplete="name"
-          defaultValue={inicial.current?.nombre ?? ''}
-          enterKeyHint="next"
-          placeholder="Escribe tu nombre"
-          error="Escribe tu nombre completo (mínimo 3 caracteres)."
-        />
+          <CampoTexto
+            id="nombre"
+            etiqueta="Tu nombre completo"
+            icono={<IconoUsuario className="size-4" />}
+            type="text"
+            required
+            minLength={3}
+            maxLength={80}
+            autoComplete="name"
+            defaultValue={inicial.current?.nombre ?? ''}
+            enterKeyHint="next"
+            placeholder="Escribe tu nombre"
+            error="Escribe tu nombre completo (mínimo 3 caracteres)."
+          />
 
-        <CampoTexto
-          id="email"
-          etiqueta="Correo electrónico"
-          icono={<IconoSobre className="size-4" />}
-          type="email"
-          required
-          maxLength={120}
-          autoComplete="email"
-          defaultValue={inicial.current?.email ?? ''}
-          inputMode="email"
-          enterKeyHint="next"
-          autoCorrect="off"
-          autoCapitalize="none"
-          spellCheck="false"
-          pattern={PATRON_CORREO}
-          title="Un correo completo, por ejemplo nombre@dominio.com"
-          placeholder="correo@ejemplo.com"
-          error="Revisa el correo: debe tener el formato nombre@dominio.com"
-        />
+          <CampoTexto
+            id="email"
+            etiqueta="Correo electrónico"
+            icono={<IconoSobre className="size-4" />}
+            type="email"
+            required
+            maxLength={120}
+            autoComplete="email"
+            defaultValue={inicial.current?.email ?? ''}
+            inputMode="email"
+            enterKeyHint="next"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck="false"
+            pattern={PATRON_CORREO}
+            title="Un correo completo, por ejemplo nombre@dominio.com"
+            placeholder="correo@ejemplo.com"
+            error="Revisa el correo: debe tener el formato nombre@dominio.com"
+          />
 
-        <CampoTexto
-          id="whatsapp"
-          etiqueta="WhatsApp"
-          opcional
-          icono={<IconoWhatsApp className="size-4 text-emerald-500" />}
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
-          defaultValue={inicial.current?.whatsapp ?? ''}
-          enterKeyHint="done"
-          maxLength={20}
-          pattern={PATRON_CELULAR}
-          title="Tu celular de 9 dígitos, que empieza con 9"
-          placeholder="Tu celular de 9 dígitos"
-          // En captura: debe correr antes que useValidacionAccesible, que lee :user-invalid al escribir.
-          onInputCapture={(e) => {
-            const falso = celularInventado(e.target.value);
-            e.target.setCustomValidity(falso ? 'Ese número no parece real.' : '');
-            setCelularFalso(falso);
-          }}
-          error={
-            celularFalso
-              ? 'Ese número no parece real. Escribe tu celular o deja el campo vacío.'
-              : 'Escribe un celular de 9 dígitos que empiece con 9.'
-          }
-        />
+          <CampoTexto
+            id="whatsapp"
+            etiqueta="WhatsApp"
+            opcional
+            icono={<IconoWhatsApp className="size-4 text-emerald-500" />}
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            defaultValue={inicial.current?.whatsapp ?? ''}
+            enterKeyHint="done"
+            maxLength={20}
+            pattern={PATRON_CELULAR}
+            title="Tu celular de 9 dígitos, que empieza con 9"
+            placeholder="Tu celular de 9 dígitos"
+            // En captura: debe correr antes que useValidacionAccesible, que lee :user-invalid al escribir.
+            onInputCapture={(e) => {
+              const falso = celularInventado(e.target.value);
+              e.target.setCustomValidity(falso ? 'Ese número no parece real.' : '');
+              setCelularFalso(falso);
+            }}
+            error={
+              celularFalso
+                ? 'Ese número no parece real. Escribe tu celular o deja el campo vacío.'
+                : 'Escribe un celular de 9 dígitos que empiece con 9.'
+            }
+          />
 
-        {/* ── Consentimientos ──────────────────────────────── */}
-        <fieldset className="space-y-2 border-0 p-0">
-          <legend className="visually-hidden">Autorizaciones</legend>
+          {/* ── Consentimientos ──────────────────────────────── */}
+          <fieldset className="space-y-2 border-0 p-0">
+            <legend className="visually-hidden">Autorizaciones</legend>
 
-          <div>
+            <div>
+              <div className="flex items-start gap-3">
+                <input
+                  id="consentimiento"
+                  name="consentimiento"
+                  type="checkbox"
+                  required
+                  data-error="consentimiento-error"
+                  className="casilla"
+                />
+                <label
+                  htmlFor="consentimiento"
+                  className="text-[12px] leading-snug text-gris-texto"
+                >
+                  He leído la{' '}
+                  <a
+                    href={URL_POLITICA}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-brand-600 underline underline-offset-2 hover:text-navy-900"
+                  >
+                    Política de Privacidad
+                  </a>{' '}
+                  y autorizo el tratamiento de mis datos para responder a mi solicitud.
+                  <span className="text-magenta"> *</span>
+                </label>
+              </div>
+              <MensajeError id="consentimiento-error">
+                Necesitamos tu autorización para poder contactarte.
+              </MensajeError>
+            </div>
+
             <div className="flex items-start gap-3">
               <input
-                id="consentimiento"
-                name="consentimiento"
+                id="marketing"
+                name="marketing"
                 type="checkbox"
-                required
-                data-error="consentimiento-error"
                 className="casilla"
+                defaultChecked={Boolean(inicial.current?.marketing)}
               />
-              <label htmlFor="consentimiento" className="text-[12px] leading-snug text-gris-texto">
-                He leído la{' '}
-                <a
-                  href={URL_POLITICA}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-semibold text-brand-600 underline underline-offset-2 hover:text-navy-900"
-                >
-                  Política de Privacidad
-                </a>{' '}
-                y autorizo el tratamiento de mis datos para responder a mi solicitud.
-                <span className="text-magenta"> *</span>
+              <label htmlFor="marketing" className="text-[12px] leading-snug text-gris-texto">
+                Deseo recibir información sobre programas, novedades y beneficios de CAPSUR.
               </label>
             </div>
-            <MensajeError id="consentimiento-error">
-              Necesitamos tu autorización para poder contactarte.
-            </MensajeError>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <input
-              id="marketing"
-              name="marketing"
-              type="checkbox"
-              className="casilla"
-              defaultChecked={Boolean(inicial.current?.marketing)}
-            />
-            <label htmlFor="marketing" className="text-[12px] leading-snug text-gris-texto">
-              Deseo recibir información sobre programas, novedades y beneficios de CAPSUR.
-            </label>
-          </div>
-        </fieldset>
-
+          </fieldset>
         </div>
 
         {estado === 'error' && (
-          <div
-            role="alert"
-            className="mt-3 shrink-0"
-          >
-          <div
-            role="presentation"
-            className="flex items-start gap-2.5 rounded-xl border border-magenta/30 bg-rose-50 p-3 text-[13px] text-magenta"
-          >
-            <IconoAlerta className="mt-0.5 size-4 shrink-0" />
-            <span>
-              No pudimos enviar tu solicitud. Revisa tu conexión e inténtalo otra vez
-              {WHATSAPP ? (
-                <>
-                  , o{' '}
-                  <a
-                    href={enlaceWhatsApp(ultimo, false)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-bold underline underline-offset-2"
-                  >
-                    escríbenos por WhatsApp
-                  </a>
-                  .
-                </>
-              ) : (
-                '.'
-              )}
-            </span>
-          </div>
+          <div role="alert" className="mt-3 shrink-0">
+            <div
+              role="presentation"
+              className="flex items-start gap-2.5 rounded-xl border border-magenta/30 bg-rose-50 p-3 text-[13px] text-magenta"
+            >
+              <IconoAlerta className="mt-0.5 size-4 shrink-0" />
+              <span>
+                No pudimos enviar tu solicitud. Revisa tu conexión e inténtalo otra vez
+                {WHATSAPP ? (
+                  <>
+                    , o{' '}
+                    <a
+                      href={enlaceWhatsApp(ultimo, false)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-bold underline underline-offset-2"
+                    >
+                      escríbenos por WhatsApp
+                    </a>
+                    .
+                  </>
+                ) : (
+                  '.'
+                )}
+              </span>
+            </div>
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={estado === 'enviando'}
-          className="boton-principal mt-3"
-        >
+        <button type="submit" disabled={estado === 'enviando'} className="boton-principal mt-3">
           {estado === 'enviando' ? (
             <>
               <svg viewBox="0 0 24 24" className="size-5 animate-spin" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" opacity="0.25" />
-                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" />
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  fill="none"
+                  opacity="0.25"
+                />
+                <path
+                  d="M12 2a10 10 0 0 1 10 10"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  fill="none"
+                  strokeLinecap="round"
+                />
               </svg>
               Enviando…
             </>

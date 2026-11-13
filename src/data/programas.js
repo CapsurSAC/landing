@@ -57,7 +57,9 @@ export const PROGRAMAS = [
     puntos: [
       { texto: 'Guía Oficial de Turismo' },
       { texto: 'Administración de Servicios de Hostelería' },
-      { texto: 'Formación continua: diplomados y cursos de turismo, hostelería, gastronomía y más' },
+      {
+        texto: 'Formación continua: diplomados y cursos de turismo, hostelería, gastronomía y más',
+      },
     ],
     area: 'turismo-hosteleria',
   },
@@ -143,7 +145,8 @@ export const PROGRAMAS = [
       { texto: 'Carrera Profesional Técnica de Gestión Administrativa', proximamente: true },
       { texto: 'Carrera Profesional Técnica de Contabilidad', proximamente: true },
       {
-        texto: 'Carrera Profesional Técnica de Desarrollo de Soluciones Tecnológicas de la Información',
+        texto:
+          'Carrera Profesional Técnica de Desarrollo de Soluciones Tecnológicas de la Información',
         proximamente: true,
       },
     ],
@@ -159,9 +162,15 @@ export const PROGRAMAS = [
     descripcion:
       'Formación continua: fortalece tus competencias profesionales en negocios, marketing y tecnología con formación especializada.',
     puntos: [
-      { texto: 'Carrera Profesional Técnica de Administración de Negocios Internacionales', proximamente: true },
+      {
+        texto: 'Carrera Profesional Técnica de Administración de Negocios Internacionales',
+        proximamente: true,
+      },
       { texto: 'Carrera Profesional Técnica de Marketing Digital', proximamente: true },
-      { texto: 'Carrera Profesional Técnica de Desarrollo de Sistemas de Información', proximamente: true },
+      {
+        texto: 'Carrera Profesional Técnica de Desarrollo de Sistemas de Información',
+        proximamente: true,
+      },
     ],
     area: '',
   },

@@ -12,6 +12,8 @@
  * Al enviar el formulario se borra de los dos.
  */
 
+import { nuevoId } from './uuid.js';
+
 const CLAVE = 'capsur_borrador';
 const VIDA = 30 * 24 * 60 * 60 * 1000; // 30 días
 const ESPERA = 1500; // ms sin escribir antes de mandarlo al servidor
@@ -19,15 +21,6 @@ const ESPERA = 1500; // ms sin escribir antes de mandarlo al servidor
 // Con Formspree (VITE_FORM_ENDPOINT externo) no hay PHP propio que lo reciba.
 const PROPIO = (import.meta.env.VITE_FORM_ENDPOINT || '/api/enviar.php').startsWith('/');
 const ENDPOINT = '/api/posible.php';
-
-const nuevoId = () => {
-  if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
-  const b = crypto.getRandomValues(new Uint8Array(16));
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-};
 
 /** { id, datos } guardado en este navegador, o null si no hay o caducó. */
 export function leerBorrador() {

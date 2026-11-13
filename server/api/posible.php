@@ -28,11 +28,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     responder(405, ['ok' => false, 'error' => 'Método no permitido']);
 }
 
-$permitidos = array_filter(array_map('trim', explode(',', env('ORIGENES_PERMITIDOS'))));
-$origen     = $_SERVER['HTTP_ORIGIN'] ?? '';
-if ($permitidos && $origen && !in_array($origen, $permitidos, true)) {
-    responder(403, ['ok' => false, 'error' => 'Origen no permitido']);
-}
+exigirOrigenPropio();
+exigirJson();
 
 // Un borrador viaja unos segundos después de cada cambio: 300 en 15 minutos
 // cubren a varias personas tras la misma IP llenando el formulario sin prisa.
@@ -104,8 +101,8 @@ $registro = [
     'email'       => $correo,
     'whatsapp'    => $whatsapp,
     // Como lo escribió: puede estar a medio terminar. El panel solo enlaza los válidos.
-    'email_valido'    => (bool) (filter_var($correo, FILTER_VALIDATE_EMAIL) && preg_match('/\.[a-z]{2,}$/i', $correo)),
-    'whatsapp_valido' => (bool) preg_match('/^\s*(\(?\+?51\)?[\s\-]?)?9([\s\-]?\d){8}\s*$/', $whatsapp) && !celularInventado($whatsapp),
+    'email_valido'    => correoValido($correo),
+    'whatsapp_valido' => celularValido($whatsapp) && !celularInventado($whatsapp),
     'area'        => limpiar($entrada['area'] ?? '', 60),
     'objetivo'    => limpiar($entrada['objetivo'] ?? '', 60),
     'inicio'      => limpiar($entrada['inicio'] ?? '', 60),

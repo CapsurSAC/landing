@@ -39,7 +39,12 @@ export default function BotonFlotante() {
       }`}
       style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
     >
-      <a href="#formulario" className="boton-principal" tabIndex={visible ? 0 : -1} data-medir="botón flotante móvil">
+      <a
+        href="#formulario"
+        className="boton-principal"
+        tabIndex={visible ? 0 : -1}
+        data-medir="botón flotante móvil"
+      >
         <IconoEnviar className="size-5" />
         Quiero recibir orientación
       </a>

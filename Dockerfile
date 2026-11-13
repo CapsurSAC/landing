@@ -38,6 +38,8 @@ RUN npm ci
 COPY index.html programas.html vite.config.js ./
 COPY public ./public
 COPY src ./src
+# Las reglas del formulario: las comparten el navegador y el PHP.
+COPY server/config/reglas.json ./server/config/reglas.json
 RUN npm run build
 
 

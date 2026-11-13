@@ -18,9 +18,7 @@ export default function Instituciones() {
     anterior.current = abierta;
     if (!clave) return;
     const cara = abierta ? '.volteo__cerrar' : '.volteo__frente';
-    lista.current
-      ?.querySelector(`[data-inst="${clave}"] ${cara}`)
-      ?.focus({ preventScroll: true });
+    lista.current?.querySelector(`[data-inst="${clave}"] ${cara}`)?.focus({ preventScroll: true });
   }, [abierta]);
 
   // Al entrar en pantalla las tarjetas se asoman una vez: así se nota que giran.

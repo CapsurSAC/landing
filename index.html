@@ -28,13 +28,8 @@
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-    <!-- Tipografía de marca -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400..800;1,400..800&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Tipografía de marca, alojada en el sitio (src/index.css declara la fuente) -->
+    <link rel="preload" href="/fonts/montserrat.woff2" as="font" type="font/woff2" crossorigin />
 
     <!-- Precarga de la imagen del hero: es la candidata a LCP -->
     <link rel="preload" as="image" href="/hero-estudiantes.webp" fetchpriority="high" />

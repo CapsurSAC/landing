@@ -29,13 +29,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     responder(405, ['ok' => false, 'error' => 'Método no permitido']);
 }
 
-// ── 2. El origen debe ser el propio sitio ──────────────────────────────────
-$permitidos = array_filter(array_map('trim', explode(',', env('ORIGENES_PERMITIDOS'))));
-$origen     = $_SERVER['HTTP_ORIGIN'] ?? '';
-
-if ($permitidos && $origen && !in_array($origen, $permitidos, true)) {
-    responder(403, ['ok' => false, 'error' => 'Origen no permitido']);
-}
+// ── 2. El origen debe ser el propio sitio, y el cuerpo JSON ────────────────
+exigirOrigenPropio();
+exigirJson();
 
 // ── 3. Límite por IP ───────────────────────────────────────────────────────
 // Solo se comprueba aquí; la cuenta se incrementa más abajo, una vez que la
@@ -62,8 +58,7 @@ if (strlen($crudo) > 20000) {
 
 $entrada = json_decode($crudo, true);
 if (!is_array($entrada)) {
-    // Respaldo por si algún día el formulario se envía sin JavaScript
-    $entrada = $_POST;
+    responder(400, ['ok' => false, 'error' => 'JSON no válido']);
 }
 
 // ── 5. Trampa para bots ────────────────────────────────────────────────────
@@ -108,18 +103,18 @@ $correo     = filter_var(trim(texto($entrada['email'] ?? '')), FILTER_VALIDATE_E
 $consiente  = filter_var($entrada['consentimiento'] ?? false, FILTER_VALIDATE_BOOLEAN);
 $marketing  = filter_var($entrada['marketing'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
-// Mismas reglas que el formulario (PATRON_CELULAR y PATRON_CORREO en
-// src/components/FormularioLead.jsx): celular peruano de 9 dígitos que empieza
-// con 9, con o sin +51, y correo cuyo dominio termina en punto y dos letras o más.
-// Además se rechazan los celulares evidentemente inventados (987 654 321…).
+// Las mismas reglas que el formulario, del mismo archivo (config/reglas.json):
+// celular peruano de 9 dígitos que empieza con 9, con o sin +51, y correo cuyo
+// dominio termina en punto y dos letras o más. Además se rechazan los celulares
+// evidentemente inventados (987 654 321…).
 $errores = [];
 if (mb_strlen($nombre) < 3)                   $errores[] = 'nombre';
-if (!$correo || !preg_match('/\.[a-z]{2,}$/i', $correo)) $errores[] = 'email';
+if (!$correo || !correoValido($correo))       $errores[] = 'email';
 if ($area === '')                             $errores[] = 'area';
 if ($objetivo === '')                         $errores[] = 'objetivo';
 if ($inicio === '')                           $errores[] = 'inicio';
 if (!$consiente)                              $errores[] = 'consentimiento';
-if ($whatsapp !== '' && !preg_match('/^(\(?\+?51\)?[\s\-]?)?9([\s\-]?\d){8}$/', $whatsapp)) {
+if ($whatsapp !== '' && !celularValido($whatsapp)) {
     $errores[] = 'whatsapp';
 } elseif (celularInventado($whatsapp)) {
     $errores[] = 'whatsapp';

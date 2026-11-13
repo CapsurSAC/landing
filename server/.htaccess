@@ -20,12 +20,16 @@
 # ── Cabeceras de seguridad ────────────────────────────────────
 <IfModule mod_headers.c>
     Header always set X-Content-Type-Options "nosniff"
-    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Frame-Options "DENY"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
-    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
-    # Nadie más puede incrustar la landing, cambiarle la base de los enlaces ni
-    # cargarle complementos. El panel /admin/ añade una política más estricta.
-    Header always set Content-Security-Policy "frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()"
+    Header always set Cross-Origin-Opener-Policy "same-origin"
+    Header always set Cross-Origin-Resource-Policy "same-origin"
+    # Igual que docker/apache-capsur.conf: la landing solo ejecuta sus scripts
+    # y los de Meta y GA4; el panel manda su propia política.
+    <If "%{REQUEST_URI} !~ m#^/(admin|api)/#">
+        Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://connect.facebook.net https://www.googletagmanager.com; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://www.facebook.com; img-src 'self' data: https://www.facebook.com https://*.google-analytics.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'none'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'"
+    </If>
     # Solo por HTTPS: el navegador recuerda un año que este dominio no se abre por HTTP.
     Header always set Strict-Transport-Security "max-age=31536000" env=HTTPS
     # Quita la firma de PHP de las respuestas

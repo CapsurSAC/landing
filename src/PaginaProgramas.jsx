@@ -93,7 +93,11 @@ export default function PaginaProgramas() {
             Aquí ves solo una parte de nuestra oferta. Responde 3 preguntas y un asesor te
             recomienda la opción que mejor encaja contigo.
           </p>
-          <a href="/#formulario" className="boton-principal w-auto px-6" data-medir="Programas: quiero orientación">
+          <a
+            href="/#formulario"
+            className="boton-principal w-auto px-6"
+            data-medir="Programas: quiero orientación"
+          >
             <IconoEnviar className="size-5" />
             Quiero recibir orientación
           </a>

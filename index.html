@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es-PE">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0A2A63" />
+
+    <title>CAPSUR Grupo Educativo — ¿Cuál es tu próximo paso profesional?</title>
+    <meta
+      name="description"
+      content="Responde 3 preguntas y recibe orientación personalizada sobre titulación, convalidación, especializaciones, diplomados y capacitación para el trabajo."
+    />
+
+    <!-- Open Graph: cómo se ve el enlace al compartirlo -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="¿Cuál es tu próximo paso profesional? — CAPSUR" />
+    <meta
+      property="og:description"
+      content="Responde 3 preguntas y recibe orientación personalizada de nuestros asesores."
+    />
+    <!-- La URL base sale de VITE_URL_SITIO (.env); WhatsApp y Facebook exigen que sea absoluta -->
+    <meta property="og:url" content="%VITE_URL_SITIO%/" />
+    <meta property="og:image" content="%VITE_URL_SITIO%/og-capsur.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="es_PE" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- Tipografía de marca -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400..800;1,400..800&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Precarga de la imagen del hero: es la candidata a LCP -->
+    <link rel="preload" as="image" href="/hero-estudiantes.webp" fetchpriority="high" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

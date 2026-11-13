@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+
+# Nunca versionar credenciales ni datos de personas
+.env
+server/config/.env
+server/config/vendor/
+server/config/PHPMailer/
+server/storage/
+*.csv
+
+# Logs
+npm-debug.log*
+*.log
+
+# Copias viejas de imágenes y del nginx anterior: solo locales
+respaldo/
+
+# Herramientas del editor y de diseño: solo locales
+.idea/
+.impeccable/
+.claude/

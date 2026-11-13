@@ -1,0 +1,31 @@
+# ══════════════════════════════════════════════════════════════
+#  Este archivo va en  public_html/logos/.htaccess
+#  (renómbralo a  .htaccess  al subirlo)
+# ══════════════════════════════════════════════════════════════
+#
+#  Aquí solo deben vivir imágenes. Esta configuración impide que
+#  el servidor ejecute NADA en esta carpeta, pase lo que pase.
+#
+#  Es una red de seguridad: el editor de la landing no sube archivos
+#  (los logos los pones tú por el administrador de archivos), pero si
+#  algún día se subiera un archivo equivocado, aquí no se ejecutaría.
+
+# ── Nada de PHP ni scripts en esta carpeta ────────────────────
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .pl .py .cgi .shtml
+RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .pl .py .cgi .shtml
+
+<FilesMatch "\.(php|phtml|php[0-9]|pl|py|cgi|sh|shtml|htaccess)$">
+    Require all denied
+</FilesMatch>
+
+# ── Solo se sirven imágenes ───────────────────────────────────
+<FilesMatch "\.(webp|png|jpe?g|avif|svg|gif|ico)$">
+    Require all granted
+</FilesMatch>
+
+# ── Sin listados de directorio ────────────────────────────────
+Options -Indexes -ExecCGI

@@ -1,0 +1,7 @@
+# Todo con saltos de línea LF: el contenedor es Linux y entrypoint.sh no corre con CRLF.
+* text=auto eol=lf
+*.webp binary
+*.jpg binary
+*.png binary
+*.avif binary
+*.woff2 binary

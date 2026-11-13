@@ -33,6 +33,9 @@ ARG VITE_WHATSAPP_NUMERO=51938230986
 ARG VITE_URL_SITIO=https://formularios.corporacioncapsur.com
 ARG VITE_META_PIXEL_ID=
 ARG VITE_GA4_ID=
+# Opcionales: anti-bots de Cloudflare y enlace para agendar una llamada.
+ARG VITE_TURNSTILE_SITE_KEY=
+ARG VITE_URL_AGENDA=
 
 COPY package.json package-lock.json ./
 RUN npm ci

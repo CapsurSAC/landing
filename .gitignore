@@ -1,31 +1,8 @@
-# dependencies
-node_modules/
-.pnpm-store/
-
-# builds
-dist/
-.next/
-out/
-coverage/
-.turbo/
-*.tsbuildinfo
-
-# env & secrets
+node_modules
+.next
 .env
-.env.*
-!.env.example
-
-# prisma
-apps/**/prisma/generated/
-
-# tests
-playwright-report/
-test-results/
-
-# OS / editors
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/*
-!.vscode/extensions.json
-*.log
+playwright-report
+test-results
+coverage
+*.tsbuildinfo
+data/

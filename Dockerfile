@@ -49,7 +49,7 @@ RUN npm run build
 
 
 # ── 2. PHPMailer ──────────────────────────────────────────────
-FROM composer:2.8@sha256:5248900ab8b5f7f880c2d62180e40960cd87f60149ec9a1abfd62ac72a02577c AS phpmailer
+FROM composer:2.10@sha256:2cf275428757e5435a667bfc0d038b14520ca02be2b1b70d44a05c8c19e2de48 AS phpmailer
 WORKDIR /deps
 RUN composer require --no-interaction --no-progress --prefer-dist phpmailer/phpmailer:6.9.3 \
  && composer audit --no-interaction

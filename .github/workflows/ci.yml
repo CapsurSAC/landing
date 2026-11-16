@@ -44,7 +44,7 @@ jobs:
         run: docker build -t capsur-landing:ci .
 
       - name: Fallos de seguridad conocidos en la imagen (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: capsur-landing:ci
           severity: HIGH,CRITICAL

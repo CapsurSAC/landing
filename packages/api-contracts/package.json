@@ -1,0 +1,33 @@
+{
+  "name": "@capsur/api-contracts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Contratos públicos de la plataforma: esquemas Zod, tipos y nombres de eventos. Solo contratos; nunca modelos ORM ni lógica de negocio.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "node --test --import tsx \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@capsur/eslint-config": "workspace:*",
+    "@capsur/tsconfig": "workspace:*",
+    "eslint": "9.39.0",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  }
+}

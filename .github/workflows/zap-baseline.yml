@@ -1,0 +1,58 @@
+name: OWASP ZAP baseline (staging)
+
+# C29: escaneo pasivo (baseline) contra staging. Nunca contra producción.
+# Requiere el secreto STAGING_URL (p. ej. https://staging.sis.example.com).
+# Revisión manual complementaria: docs/security/asvs-l1-checklist.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: URL a escanear (vacío = secreto STAGING_URL)
+        required: false
+        default: ''
+  schedule:
+    - cron: '41 7 * * 3' # miércoles 02:41 hora de Lima
+
+permissions:
+  contents: read
+
+jobs:
+  zap:
+    name: ZAP baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Resolver objetivo
+        id: target
+        env:
+          INPUT_TARGET: ${{ inputs.target }}
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+        run: |
+          url="${INPUT_TARGET:-$STAGING_URL}"
+          if [ -z "$url" ]; then
+            echo "::warning::No hay STAGING_URL configurado; se omite el escaneo."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "$url" in
+            *staging*|*qa*|*test*|*preview*) ;;
+            *) echo "::error::El objetivo no parece un entorno de pruebas; ZAP solo se ejecuta contra staging."; exit 1 ;;
+          esac
+          echo "::add-mask::$url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+      - name: ZAP baseline
+        if: steps.target.outputs.skip == 'false'
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ steps.target.outputs.url }}
+          rules_file_name: .github/zap/rules.tsv
+          cmd_options: '-a -j'
+          allow_issue_writing: false
+          fail_action: true
+          artifact_name: zap-baseline

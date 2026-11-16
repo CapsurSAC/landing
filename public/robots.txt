@@ -1,7 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /admin/
-Disallow: /api/
-Disallow: /gracias
-
-Sitemap: https://formularios.corporacioncapsur.com/sitemap.xml

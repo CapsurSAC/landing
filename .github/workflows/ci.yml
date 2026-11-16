@@ -1,71 +1,266 @@
-# Revisión automática en cada cambio: código, pruebas, imagen Docker y
-# prueba de humo contra la imagen ya levantada. Si algo falla, no se publica.
-name: Revisión
+name: CI
+
+# Integración continua del monorepo.
+#  - B16: caché remota de Turborepo (TURBO_TOKEN/TURBO_TEAM si existen) y
+#         `--affected` en PRs: solo se valida lo que cambió (y sus dependientes).
+#  - B7:  Lighthouse CI con presupuestos sobre web-sis construido.
+#  - B14: contratos OpenAPI comparados con la rama base (oasdiff breaking).
+#  - B17: pruebas de integración (Testcontainers / infraestructura local).
+#  - C16: imágenes escaneadas con Trivy (falla con CVE CRITICAL corregibles) + SBOM CycloneDX.
+# Secretos (gitleaks) y escaneo del repositorio: security.yml.
 
 on:
   push:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
+env:
+  PNPM_VERSION: 12.18.0
+  NODE_VERSION: 24
+  NEXT_TELEMETRY_DISABLED: 1
+  HUSKY: 0
+  TURBO_TELEMETRY_DISABLED: 1
+  # Caché remota (Vercel Remote Cache o servidor compatible). Sin secretos = solo caché local.
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM || secrets.TURBO_TEAM }}
+  # Base de comparación para --affected en PRs.
+  TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+  TURBO_SCM_HEAD: ${{ github.event.pull_request.head.sha }}
+
 jobs:
-  revisar:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+  changes:
+    name: Paquetes afectados
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      web_sis: ${{ steps.affected.outputs.web_sis }}
+      services: ${{ steps.affected.outputs.services }}
+      apps: ${{ steps.affected.outputs.apps }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
         with:
-          node-version: 22
-          cache: npm
-
-      - name: Dependencias
-        run: npm ci
-
-      - name: Revisión de código (ESLint)
-        run: npm run lint
-
-      - name: Formato (Prettier)
-        run: npm run formato
-
-      - name: Pruebas (reglas del formulario y datos)
-        run: npm test
-
-      - name: Dependencias con fallos de seguridad conocidos
-        run: npm audit --omit=dev --audit-level=high
-
-      - name: Construcción
-        run: npm run build
-
-      - name: Imagen Docker
-        run: docker build -t capsur-landing:ci .
-
-      - name: Fallos de seguridad conocidos en la imagen (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
         with:
-          image-ref: capsur-landing:ci
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
+          node-version: ${{ env.NODE_VERSION }}
+      - id: affected
+        run: node .github/scripts/affected.mjs
 
-      - name: Levantar la imagen
-        run: |
-          docker run -d --name capsur -p 8099:80 \
-            -e ORIGENES_PERMITIDOS=http://localhost:8099 capsur-landing:ci
-          for i in $(seq 1 30); do curl -sf http://localhost:8099/ >/dev/null && break; sleep 1; done
+  verify:
+    name: Lint, typecheck, pruebas y build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Turborepo (afectados en PR, todo en main)
+        run: pnpm turbo run lint typecheck test build ${{ github.event_name == 'pull_request' && '--affected' || '' }}
 
-      - name: Sintaxis PHP
-        run: |
-          for f in $(docker exec capsur sh -c 'ls /var/www/html/api/*.php /var/www/html/admin/*.php /var/www/config/*.php'); do
-            docker exec capsur php -l "$f"
-          done
-
-      - name: Prueba de humo
-        run: node scripts/prueba-humo.mjs http://localhost:8099
-
-      - name: Registro del contenedor si algo falló
+  e2e:
+    name: E2E landing (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [changes, verify]
+    if: needs.changes.outputs.web_sis == 'true'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - run: pnpm --filter @capsur/web-sis exec playwright install --with-deps chromium
+      - run: pnpm turbo run build --filter=@capsur/web-sis
+      - run: pnpm --filter @capsur/web-sis test:e2e
+        env:
+          CI: true
+      - uses: actions/upload-artifact@v6
         if: failure()
-        run: docker logs capsur
+        with:
+          name: playwright-report
+          path: apps/web-sis/playwright-report
+          retention-days: 7
+
+  lighthouse:
+    name: Lighthouse CI (presupuestos)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [changes, verify]
+    if: needs.changes.outputs.web_sis == 'true'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - name: Build de web-sis
+        run: pnpm turbo run build --filter=@capsur/web-sis
+      - name: Lighthouse CI (LCP móvil <= 2,5 s, CLS < 0,1, JS <= 150 KB, accesibilidad >= 0,95)
+        run: npx --yes @lhci/cli@0.15.1 autorun --config=.lighthouserc.json
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci
+          retention-days: 14
+
+  contracts:
+    name: Contrato OpenAPI · ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [changes]
+    if: needs.changes.outputs.services != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+    env:
+      SPEC: docs/api/openapi/${{ matrix.service }}.json
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: ¿Tiene script openapi:export?
+        id: script
+        run: |
+          if node -e "process.exit(require('./apps/${{ matrix.service }}/package.json').scripts?.['openapi:export'] ? 0 : 1)"; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::apps/${{ matrix.service }} aún no define openapi:export; se omite la verificación de contrato."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Exportar OpenAPI
+        if: steps.script.outputs.present == 'true'
+        run: pnpm turbo run openapi:export --filter=@capsur/${{ matrix.service }}
+      - name: El contrato versionado está al día
+        if: steps.script.outputs.present == 'true'
+        run: |
+          if ! git diff --exit-code -- "$SPEC"; then
+            echo "::error file=$SPEC::El OpenAPI exportado difiere del versionado. Ejecuta 'pnpm --filter @capsur/${{ matrix.service }} openapi:export' y confirma $SPEC."
+            exit 1
+          fi
+          if [ -n "$(git status --porcelain -- "$SPEC")" ]; then
+            echo "::error file=$SPEC::$SPEC no está versionado. Confírmalo en el PR."
+            exit 1
+          fi
+      - name: Cambios incompatibles frente a la rama base (oasdiff)
+        if: steps.script.outputs.present == 'true' && github.event_name == 'pull_request'
+        run: |
+          mkdir -p /tmp/oas
+          if ! git show "${{ github.event.pull_request.base.sha }}:$SPEC" > /tmp/oas/base.json 2>/dev/null; then
+            echo "::notice::La rama base no tiene $SPEC; primer contrato, no hay con qué comparar."
+            exit 0
+          fi
+          cp "$SPEC" /tmp/oas/head.json
+          docker run --rm -v /tmp/oas:/specs:ro tufin/oasdiff:v1.11.7 \
+            breaking /specs/base.json /specs/head.json --fail-on ERR --format githubactions
+
+  integration:
+    name: Pruebas de integración
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [changes, verify]
+    if: needs.changes.outputs.services != '[]'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - name: Variables de entorno de desarrollo
+        run: |
+          cp .env.example .env
+          for s in promotions-service leads-service crm-bridge-service; do
+            [ -f "apps/$s/.env.example" ] && cp "apps/$s/.env.example" "apps/$s/.env"
+          done
+      - name: Infraestructura (Postgres, Redis, RabbitMQ)
+        run: pnpm infra:up --wait
+      - name: Migraciones
+        run: pnpm db:migrate
+      - name: Pruebas de integración (Testcontainers usa el Docker del runner)
+        run: pnpm test:int
+      - name: Logs de infraestructura
+        if: failure()
+        run: docker compose --env-file .env -f infrastructure/docker/docker-compose.yml logs --no-color --tail=200
+      - name: Bajar infraestructura
+        if: always()
+        run: pnpm infra:down -v
+
+  images:
+    name: Imagen · ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [changes, verify]
+    if: needs.changes.outputs.apps != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.changes.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - name: Build runtime (sin publicar; el despliegue lo hace EasyPanel desde el repositorio)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          target: runtime
+          load: true
+          push: false
+          tags: capsur/${{ matrix.app }}:ci
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+      - name: Build job de migraciones
+        if: endsWith(matrix.app, '-service')
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          target: migrate
+          push: false
+          cache-from: type=gha,scope=${{ matrix.app }}
+      - name: Tamaño de la imagen
+        run: |
+          bytes=$(docker image inspect capsur/${{ matrix.app }}:ci --format '{{.Size}}')
+          mb=$((bytes / 1024 / 1024))
+          echo "### capsur/${{ matrix.app }}: ${mb} MB" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "${{ matrix.app }}" == *-service && $mb -gt 250 ]]; then
+            echo "::warning::capsur/${{ matrix.app }} pesa ${mb} MB (objetivo < 250 MB, B22)"
+          fi
+      - name: Trivy · CVE CRITICAL corregibles bloquean (C16)
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: capsur/${{ matrix.app }}:ci
+          scan-type: image
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          trivyignores: .trivyignore
+          format: table
+      - name: Trivy · informe completo (HIGH y CRITICAL, informativo)
+        if: always()
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: capsur/${{ matrix.app }}:ci
+          scan-type: image
+          severity: HIGH,CRITICAL
+          exit-code: '0'
+          trivyignores: .trivyignore
+          format: json
+          output: trivy-${{ matrix.app }}.json
+      - name: SBOM CycloneDX
+        if: always()
+        uses: anchore/sbom-action@v0.24.2
+        with:
+          image: capsur/${{ matrix.app }}:ci
+          format: cyclonedx-json
+          output-file: sbom-${{ matrix.app }}.cdx.json
+          upload-artifact: false
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: supply-chain-${{ matrix.app }}
+          path: |
+            sbom-${{ matrix.app }}.cdx.json
+            trivy-${{ matrix.app }}.json
+          retention-days: 90

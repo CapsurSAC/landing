@@ -1,0 +1,14 @@
+# Solo aplica si se construye con la carpeta del servicio como contexto.
+# El build oficial usa la raíz del monorepo como contexto y el filtro
+# apps/promotions-service/Dockerfile.dockerignore (BuildKit lo aplica automáticamente).
+node_modules
+dist
+.next
+.turbo
+coverage
+playwright-report
+test-results
+prisma/generated
+.env
+.env.*
+!.env.example

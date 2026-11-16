@@ -1,0 +1,164 @@
+# ---------------------------------------------------------------------------
+# Gateway de borde (local/staging). Configuración dinámica del file provider.
+# Producción: dynamic.prod.yml (TLS 1.2+, HSTS, redirección https, hosts reales).
+#
+# Este archivo usa plantillas Go de Traefik (se evalúan antes de parsear el
+# YAML) para leer variables de entorno del contenedor del gateway:
+#   ADMIN_HOST          host del panel (por defecto admin.localhost)
+#   ADMIN_IP_ALLOWLIST  CIDR separados por comas; vacío = sin restricción
+#
+# Reglas (C13, B9, ADR 0007):
+#   - /internal/* y /api/revalidate NUNCA se exponen (403 desde fuera).
+#   - Límite de cuerpo 1 MB (buffering) en API, webhook y panel.
+#   - Compresión Brotli/gzip para respuestas >= 1 KB.
+#   - Panel admin-web en host propio, con allowlist de IP opcional.
+# ---------------------------------------------------------------------------
+http:
+  routers:
+    # Prioridad máxima: bloquea rutas internas en cualquier host.
+    block-internal:
+      rule: "PathPrefix(`/internal`) || Path(`/api/revalidate`) || PathPrefix(`/api/revalidate/`)"
+      entryPoints: [web]
+      priority: 10000
+      middlewares: [deny-all]
+      service: noop@internal
+
+    admin:
+      rule: 'Host(`{{ env "ADMIN_HOST" | default "admin.localhost" }}`)'
+      entryPoints: [web]
+      priority: 5000
+      middlewares: [admin-ipallowlist, body-limit, compression, admin-security-headers]
+      service: admin-web
+
+    promotions:
+      rule: "PathPrefix(`/api/v1/promotions`) || PathPrefix(`/api/v1/specialties`)"
+      entryPoints: [web]
+      middlewares: [body-limit, compression, public-ratelimit, security-headers]
+      service: promotions
+
+    leads:
+      rule: "PathPrefix(`/api/v1/leads`) || PathPrefix(`/api/v1/tracking`) || PathPrefix(`/api/v1/complaints`) || PathPrefix(`/api/v1/privacy`)"
+      entryPoints: [web]
+      middlewares: [body-limit, leads-ratelimit, security-headers]
+      service: leads
+
+    chatwoot-webhook:
+      rule: "Path(`/webhooks/chatwoot`)"
+      entryPoints: [web]
+      middlewares: [body-limit, webhook-ratelimit, security-headers]
+      service: crm-bridge
+
+    web:
+      rule: "PathPrefix(`/`)"
+      entryPoints: [web]
+      priority: 1
+      # Sin buffering: preserva el streaming de Next (RSC/HTML progresivo).
+      middlewares: [compression, security-headers]
+      service: web
+
+  middlewares:
+    # 403 para cualquier origen (solo 127.0.0.1 dentro del propio contenedor).
+    deny-all:
+      ipAllowList:
+        sourceRange: ["127.0.0.1/32"]
+
+    admin-ipallowlist:
+      ipAllowList:
+        sourceRange:
+{{- range $cidr := splitList "," (env "ADMIN_IP_ALLOWLIST" | default "0.0.0.0/0,::/0") }}
+          - "{{ trim $cidr }}"
+{{- end }}
+
+    body-limit:
+      buffering:
+        maxRequestBodyBytes: 1048576
+        memRequestBodyBytes: 1048576
+        # Respuestas sin límite (0) para no cortar descargas como el CSV de leads.
+        maxResponseBodyBytes: 0
+
+    compression:
+      compress:
+        encodings: [br, gzip]
+        minResponseBodyBytes: 1024
+
+    security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        # X-XSS-Protection está obsoleto y puede introducir fugas: desactivado.
+        browserXssFilter: false
+        referrerPolicy: strict-origin-when-cross-origin
+        permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=()"
+        customResponseHeaders:
+          Server: ""
+          X-Powered-By: ""
+          X-DNS-Prefetch-Control: "off"
+          Cross-Origin-Opener-Policy: "same-origin"
+          Cross-Origin-Resource-Policy: "same-origin"
+
+    # Panel: mismas protecciones, sin Referer y sin indexación. La CSP con nonce
+    # la pone la propia app (src/proxy.ts).
+    admin-security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: false
+        referrerPolicy: no-referrer
+        permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        customResponseHeaders:
+          Server: ""
+          X-Powered-By: ""
+          X-DNS-Prefetch-Control: "off"
+          X-Robots-Tag: "noindex, nofollow, noarchive"
+          Cross-Origin-Opener-Policy: "same-origin"
+          Cross-Origin-Resource-Policy: "same-origin"
+
+    public-ratelimit:
+      rateLimit:
+        average: 60
+        burst: 120
+        period: 1m
+    leads-ratelimit:
+      rateLimit:
+        average: 10
+        burst: 20
+        period: 1m
+    webhook-ratelimit:
+      rateLimit:
+        average: 120
+        burst: 240
+        period: 1m
+
+  serversTransports:
+    default-timeouts:
+      forwardingTimeouts:
+        dialTimeout: 5s
+        responseHeaderTimeout: 30s
+        idleConnTimeout: 90s
+
+  services:
+    promotions:
+      loadBalancer:
+        serversTransport: default-timeouts
+        servers:
+          - url: "http://promotions-service:3001"
+    leads:
+      loadBalancer:
+        serversTransport: default-timeouts
+        servers:
+          - url: "http://leads-service:3002"
+    crm-bridge:
+      loadBalancer:
+        serversTransport: default-timeouts
+        servers:
+          - url: "http://crm-bridge-service:3003"
+    web:
+      loadBalancer:
+        serversTransport: default-timeouts
+        servers:
+          - url: "http://web-sis:3000"
+    admin-web:
+      loadBalancer:
+        serversTransport: default-timeouts
+        servers:
+          - url: "http://admin-web:3004"

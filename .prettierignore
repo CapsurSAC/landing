@@ -1,6 +1,7 @@
-dist/
-node_modules/
-respaldo/
-package-lock.json
-*.php
-*.md
+node_modules
+dist
+.next
+.turbo
+coverage
+pnpm-lock.yaml
+apps/**/prisma/migrations

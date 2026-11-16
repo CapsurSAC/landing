@@ -1,24 +1,31 @@
+# dependencies
 node_modules/
+.pnpm-store/
+
+# builds
 dist/
-.DS_Store
-*.local
+.next/
+out/
+coverage/
+.turbo/
+*.tsbuildinfo
 
-# Nunca versionar credenciales ni datos de personas
+# env & secrets
 .env
-server/config/.env
-server/config/vendor/
-server/config/PHPMailer/
-server/storage/
-*.csv
+.env.*
+!.env.example
 
-# Logs
-npm-debug.log*
-*.log
+# prisma
+apps/**/prisma/generated/
 
-# Copias viejas de imágenes y del nginx anterior: solo locales
-respaldo/
+# tests
+playwright-report/
+test-results/
 
-# Herramientas del editor y de diseño: solo locales
+# OS / editors
+.DS_Store
+Thumbs.db
 .idea/
-.impeccable/
-.claude/
+.vscode/*
+!.vscode/extensions.json
+*.log

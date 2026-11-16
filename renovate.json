@@ -1,0 +1,109 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "C17: actualizaciones agrupadas, versiones fijadas y edad mínima de 14 días antes de proponer una versión nueva.",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":semanticCommitScope(deps)",
+    "helpers:pinGitHubActionDigestsToSemver",
+    "docker:pinDigests"
+  ],
+  "timezone": "America/Lima",
+  "schedule": ["before 9am on monday"],
+  "labels": ["dependencias"],
+  "rangeStrategy": "pin",
+  "minimumReleaseAge": "14 days",
+  "internalChecksFilter": "strict",
+  "prConcurrentLimit": 8,
+  "prHourlyLimit": 4,
+  "postUpdateOptions": ["pnpmDedupe"],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 9am on the first day of the month"]
+  },
+  "vulnerabilityAlerts": {
+    "labels": ["seguridad"],
+    "minimumReleaseAge": null,
+    "schedule": ["at any time"]
+  },
+  "packageRules": [
+    {
+      "description": "NestJS y su ecosistema",
+      "groupName": "nestjs",
+      "matchPackageNames": ["@nestjs/**", "nestjs-pino", "reflect-metadata", "rxjs"]
+    },
+    {
+      "description": "Next.js y React (web-sis y admin-web)",
+      "groupName": "next-react",
+      "matchPackageNames": [
+        "next",
+        "eslint-config-next",
+        "@next/**",
+        "react",
+        "react-dom",
+        "@types/react",
+        "@types/react-dom"
+      ]
+    },
+    {
+      "description": "Prisma (CLI y cliente deben ir juntos)",
+      "groupName": "prisma",
+      "matchPackageNames": ["prisma", "@prisma/**"]
+    },
+    {
+      "description": "Sentry",
+      "groupName": "sentry",
+      "matchPackageNames": ["@sentry/**"]
+    },
+    {
+      "description": "Testcontainers",
+      "groupName": "testcontainers",
+      "matchPackageNames": ["testcontainers", "@testcontainers/**"]
+    },
+    {
+      "description": "Lint y formato",
+      "groupName": "lint",
+      "matchPackageNames": [
+        "eslint",
+        "@eslint/**",
+        "typescript-eslint",
+        "eslint-config-prettier",
+        "globals",
+        "prettier"
+      ]
+    },
+    {
+      "description": "Herramientas de repositorio",
+      "groupName": "repo-tooling",
+      "matchPackageNames": ["husky", "lint-staged", "@commitlint/**", "@changesets/**", "turbo"]
+    },
+    {
+      "description": "Tipos: menor riesgo, se agrupan",
+      "groupName": "types",
+      "matchPackageNames": ["@types/**"],
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "description": "GitHub Actions agrupadas",
+      "groupName": "github-actions",
+      "matchManagers": ["github-actions"]
+    },
+    {
+      "description": "Imágenes base Docker (node, postgres, redis, rabbitmq, traefik): sin saltos mayores automáticos",
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "Node 24 LTS: no proponer Node impar",
+      "matchDatasources": ["docker", "node-version"],
+      "matchPackageNames": ["node"],
+      "allowedVersions": "/^24\\./"
+    },
+    {
+      "description": "Las majors siempre en PR propio y con revisión manual",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    }
+  ]
+}

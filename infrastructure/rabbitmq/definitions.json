@@ -1,0 +1,191 @@
+{
+  "rabbit_version": "4.0",
+  "users": [
+    { "name": "capsur", "password": "capsur", "tags": ["administrator"] },
+    { "name": "leads_svc", "password": "leads_svc_local", "tags": [] },
+    { "name": "crm_bridge_svc", "password": "crm_bridge_svc_local", "tags": [] }
+  ],
+  "vhosts": [{ "name": "/" }],
+  "permissions": [
+    { "user": "capsur", "vhost": "/", "configure": ".*", "write": ".*", "read": ".*" },
+    {
+      "user": "leads_svc",
+      "vhost": "/",
+      "configure": "^$",
+      "write": "^capsur\\.events$",
+      "read": "^leads\\..*"
+    },
+    {
+      "user": "crm_bridge_svc",
+      "vhost": "/",
+      "configure": "^$",
+      "write": "^(capsur\\.events|capsur\\.events\\.dlx|amq\\.default)$",
+      "read": "^crm-bridge\\..*"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "capsur.events",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "capsur.events.retry",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "capsur.events.dlx",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "crm-bridge.lead-created",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": { "x-queue-type": "quorum", "x-dead-letter-exchange": "capsur.events.retry" }
+    },
+    {
+      "name": "crm-bridge.lead-created.retry",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-message-ttl": 30000,
+        "x-dead-letter-exchange": "capsur.events",
+        "x-dead-letter-routing-key": "lead.created.v1"
+      }
+    },
+    {
+      "name": "crm-bridge.lead-created.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": { "x-queue-type": "quorum" }
+    },
+    {
+      "name": "crm-bridge.lead-feedback",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": { "x-queue-type": "quorum" }
+    },
+    {
+      "name": "crm-bridge.lead-anonymized",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": { "x-queue-type": "quorum", "x-delivery-limit": 10 }
+    },
+    {
+      "name": "crm-bridge.meta-capi",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "crm-bridge.meta-capi.retry"
+      }
+    },
+    {
+      "name": "crm-bridge.meta-capi.retry",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-message-ttl": 60000,
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "crm-bridge.meta-capi"
+      }
+    },
+    {
+      "name": "crm-bridge.meta-capi.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": { "x-queue-type": "quorum" }
+    },
+    {
+      "name": "leads.crm-status",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": { "x-queue-type": "quorum" }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "capsur.events",
+      "vhost": "/",
+      "destination": "crm-bridge.lead-created",
+      "destination_type": "queue",
+      "routing_key": "lead.created.v1",
+      "arguments": {}
+    },
+    {
+      "source": "capsur.events.retry",
+      "vhost": "/",
+      "destination": "crm-bridge.lead-created.retry",
+      "destination_type": "queue",
+      "routing_key": "lead.created.v1",
+      "arguments": {}
+    },
+    {
+      "source": "capsur.events.dlx",
+      "vhost": "/",
+      "destination": "crm-bridge.lead-created.dlq",
+      "destination_type": "queue",
+      "routing_key": "lead.created.v1",
+      "arguments": {}
+    },
+    {
+      "source": "capsur.events",
+      "vhost": "/",
+      "destination": "crm-bridge.lead-feedback",
+      "destination_type": "queue",
+      "routing_key": "lead.feedback.v1",
+      "arguments": {}
+    },
+    {
+      "source": "capsur.events",
+      "vhost": "/",
+      "destination": "crm-bridge.lead-anonymized",
+      "destination_type": "queue",
+      "routing_key": "lead.anonymized.v1",
+      "arguments": {}
+    },
+    {
+      "source": "capsur.events",
+      "vhost": "/",
+      "destination": "crm-bridge.meta-capi",
+      "destination_type": "queue",
+      "routing_key": "lead.created.v1",
+      "arguments": {}
+    },
+    {
+      "source": "capsur.events",
+      "vhost": "/",
+      "destination": "leads.crm-status",
+      "destination_type": "queue",
+      "routing_key": "crm.#",
+      "arguments": {}
+    }
+  ]
+}

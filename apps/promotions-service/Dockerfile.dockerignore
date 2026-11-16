@@ -1,0 +1,26 @@
+# Filtro del contexto (raíz del monorepo) para apps/promotions-service/Dockerfile.
+# BuildKit usa <Dockerfile>.dockerignore cuando existe; el .dockerignore de la
+# carpeta del servicio NO se aplica porque el contexto es la raíz.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+**/playwright-report
+**/test-results
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+apps/*/prisma/generated
+.git
+.github
+.husky
+.changeset
+.claude
+docs
+infrastructure
+apps/web-sis
+apps/admin-web
+apps/leads-service
+apps/crm-bridge-service

@@ -1,0 +1,21 @@
+{
+  "name": "@capsur/eslint-config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Configuración ESLint (flat config) compartida",
+  "exports": {
+    "./base": "./base.js",
+    "./nest": "./nest.js",
+    "./next": "./next.js"
+  },
+  "dependencies": {
+    "@eslint/js": "9.39.0",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.14.0",
+    "typescript-eslint": "8.72.2"
+  },
+  "peerDependencies": {
+    "eslint": ">=9"
+  }
+}

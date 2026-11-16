@@ -1,0 +1,75 @@
+{
+  "name": "@capsur/nest-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Piezas transversales para los microservicios NestJS: validación Zod, problem-details, logging, health, seguridad HTTP, autenticación entre servicios, auditoría, rate limiting en Redis, RabbitMQ y Sentry. Sin lógica de negocio.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./sentry": {
+      "types": "./dist/sentry/index.d.ts",
+      "require": "./dist/sentry/index.js",
+      "default": "./dist/sentry/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@capsur/api-contracts": "workspace:*",
+    "@sentry/nestjs": "11.12.0",
+    "amqplib": "2.3.1",
+    "helmet": "8.3.0",
+    "ioredis": "6.0.0",
+    "nestjs-pino": "5.3.1",
+    "pino": "10.4.0",
+    "pino-http": "11.0.0",
+    "zod": "4.6.7"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/swagger": "^11.0.0",
+    "@nestjs/throttler": "^6.0.0",
+    "reflect-metadata": "^0.2.0",
+    "rxjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capsur/eslint-config": "workspace:*",
+    "@capsur/tsconfig": "workspace:*",
+    "@nestjs/common": "11.2.10",
+    "@nestjs/core": "11.2.10",
+    "@nestjs/platform-express": "11.2.10",
+    "@nestjs/swagger": "11.4.8",
+    "@nestjs/testing": "11.2.10",
+    "@nestjs/throttler": "6.7.1",
+    "@swc/core": "1.16.22",
+    "@swc/jest": "0.2.39",
+    "@types/amqplib": "0.10.8",
+    "@types/express": "5.0.6",
+    "@types/jest": "30.0.0",
+    "@types/node": "24.19.2",
+    "@types/supertest": "7.2.1",
+    "eslint": "9.39.0",
+    "jest": "30.5.2",
+    "pino-pretty": "13.2.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "supertest": "7.3.2",
+    "typescript": "5.9.3"
+  }
+}

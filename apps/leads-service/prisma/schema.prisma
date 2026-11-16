@@ -1,0 +1,314 @@
+// Esquema de datos de leads-service. Base de datos propia (`leads`).
+// El cliente se genera en ./generated/client para no compartirlo con otros servicios.
+//
+// Datos personales (C8): las columnas marcadas «cifrada» guardan el formato
+// `v1.<iv>.<tag>.<ciphertext>` de PiiCipher (AES-256-GCM). Para duplicados y
+// búsquedas se usan `*_hash` (HMAC-SHA256 con PII_HASH_KEY), nunca el dato en claro.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Estado del lead respecto a la sincronización con el CRM.
+enum LeadStatus {
+  REGISTERED
+  CRM_SYNCING
+  CRM_SYNCED
+  CRM_FAILED
+}
+
+/// Resultado de cada solicitud HTTP recibida (incluye duplicados).
+enum SubmissionOutcome {
+  CREATED
+  DUPLICATE
+  REPLAYED
+}
+
+/// Estado de un evento en la tabla outbox.
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+/// Estado de una notificación (correo de confirmación).
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model Lead {
+  id                      String     @id @default(uuid()) @db.Uuid
+  reference               String     @unique @db.VarChar(16)
+  brand                   String     @db.VarChar(32)
+  promotionId             String     @map("promotion_id") @db.VarChar(64)
+  promotionName           String     @map("promotion_name") @db.VarChar(120)
+  promotionHeadline       String     @map("promotion_headline") @db.VarChar(120)
+  /// Precio de referencia en céntimos al momento del registro (eventos de conversión).
+  priceAmount             Int?       @map("price_amount")
+  campaignId              String?    @map("campaign_id") @db.VarChar(64)
+  /// Sede elegida (A4).
+  campus                  String     @default("tacna") @db.VarChar(16)
+  /// Especialidades elegidas `[{ id, name }]` (A3).
+  specialties             Json       @default("[]")
+  /// cifrada
+  fullName                String     @map("full_name")
+  /// cifrada (E.164)
+  phoneE164               String     @map("phone_e164")
+  phoneHash               String?    @map("phone_hash") @db.VarChar(64)
+  phoneCountry            String     @map("phone_country") @db.VarChar(2)
+  /// cifrada
+  email                   String
+  emailHash               String?    @map("email_hash") @db.VarChar(64)
+  /// Experimento A/B al que estuvo expuesto (A18).
+  experimentId            String?    @map("experiment_id") @db.VarChar(64)
+  experimentVariant       String?    @map("experiment_variant") @db.VarChar(32)
+  status                  LeadStatus @default(REGISTERED)
+  crmContactId            String?    @map("crm_contact_id") @db.VarChar(64)
+  crmConversationId       String?    @map("crm_conversation_id") @db.VarChar(64)
+  crmAdvisorName          String?    @map("crm_advisor_name") @db.VarChar(120)
+  crmSyncedAt             DateTime?  @map("crm_synced_at") @db.Timestamptz(6)
+  crmConversationLinkedAt DateTime?  @map("crm_conversation_linked_at") @db.Timestamptz(6)
+  /// «¿Cómo nos conociste?» (A21), una sola vez por lead.
+  feedbackSource          String?    @map("feedback_source") @db.VarChar(32)
+  feedbackDetail          String?    @map("feedback_detail") @db.VarChar(120)
+  feedbackAt              DateTime?  @map("feedback_at") @db.Timestamptz(6)
+  anonymizedAt            DateTime?  @map("anonymized_at") @db.Timestamptz(6)
+  createdAt               DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  submissions   LeadSubmission[]
+  consents      ConsentRecord[]
+  attribution   LeadAttribution?
+  notifications Notification[]
+
+  @@index([brand, phoneHash, promotionId, createdAt], map: "leads_duplicate_lookup_idx")
+  @@index([createdAt(sort: Desc)], map: "leads_created_at_idx")
+  @@index([emailHash], map: "leads_email_hash_idx")
+  @@index([phoneHash], map: "leads_phone_hash_idx")
+  @@map("leads")
+}
+
+model LeadSubmission {
+  id                 String            @id @default(uuid()) @db.Uuid
+  leadId             String            @map("lead_id") @db.Uuid
+  /// sha256(Idempotency-Key + ":" + ipHash) (C19).
+  idempotencyKey     String            @unique @map("idempotency_key") @db.VarChar(128)
+  requestFingerprint String            @map("request_fingerprint") @db.VarChar(64)
+  ipHash             String?           @map("ip_hash") @db.VarChar(64)
+  userAgent          String?           @map("user_agent") @db.VarChar(512)
+  outcome            SubmissionOutcome
+  /// cifrada: JSON de la respuesta (sin statusToken), solo se lee en replays.
+  responseSnapshot   String            @map("response_snapshot")
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([createdAt, outcome], map: "lead_submissions_created_at_outcome_idx")
+  @@map("lead_submissions")
+}
+
+/// Append-only (C11): un trigger rechaza DELETE y cualquier UPDATE que no sea
+/// poner `ip_hash`/`user_agent` a NULL.
+model ConsentRecord {
+  id                String   @id @default(uuid()) @db.Uuid
+  leadId            String   @map("lead_id") @db.Uuid
+  contactAccepted   Boolean  @map("contact_accepted")
+  marketingAccepted Boolean  @map("marketing_accepted")
+  privacyVersion    String   @map("privacy_version") @db.VarChar(32)
+  acceptedAt        DateTime @map("accepted_at") @db.Timestamptz(6)
+  ipHash            String?  @map("ip_hash") @db.VarChar(64)
+  userAgent         String?  @map("user_agent") @db.VarChar(512)
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("consent_records")
+}
+
+model LeadAttribution {
+  leadId      String  @id @map("lead_id") @db.Uuid
+  utmSource   String? @map("utm_source") @db.VarChar(100)
+  utmMedium   String? @map("utm_medium") @db.VarChar(100)
+  utmCampaign String? @map("utm_campaign") @db.VarChar(150)
+  utmContent  String? @map("utm_content") @db.VarChar(150)
+  utmTerm     String? @map("utm_term") @db.VarChar(150)
+  referrer    String? @db.VarChar(500)
+  landingPath String? @map("landing_path") @db.VarChar(300)
+  fbclid      String? @db.VarChar(200)
+  gclid       String? @db.VarChar(200)
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([utmCampaign], map: "lead_attributions_utm_campaign_idx")
+  @@map("lead_attributions")
+}
+
+/// Transactional Outbox: el id de la fila es el id del evento publicado.
+model OutboxEvent {
+  id            String       @id @db.Uuid
+  name          String       @db.VarChar(64)
+  version       Int
+  correlationId String       @map("correlation_id") @db.VarChar(64)
+  /// cifrada: JSON del payload (puede llevar datos personales).
+  payload       String
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  nextAttemptAt DateTime     @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  publishedAt   DateTime?    @map("published_at") @db.Timestamptz(6)
+  lastError     String?      @map("last_error") @db.VarChar(1000)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([status, nextAttemptAt])
+  @@index([correlationId], map: "outbox_events_correlation_id_idx")
+  @@map("outbox_events")
+}
+
+model TrackingEvent {
+  id                String   @id @default(uuid()) @db.Uuid
+  brand             String   @db.VarChar(32)
+  event             String   @db.VarChar(64)
+  sessionId         String   @map("session_id") @db.VarChar(64)
+  leadId            String?  @map("lead_id") @db.Uuid
+  promotionId       String?  @map("promotion_id") @db.VarChar(64)
+  specialtyId       String?  @map("specialty_id") @db.VarChar(64)
+  experimentId      String?  @map("experiment_id") @db.VarChar(64)
+  experimentVariant String?  @map("experiment_variant") @db.VarChar(32)
+  attribution       Json?
+  occurredAt        DateTime @map("occurred_at") @db.Timestamptz(6)
+  receivedAt        DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@index([brand, event, occurredAt, sessionId], map: "tracking_events_funnel_idx")
+  @@map("tracking_events")
+}
+
+/// Idempotencia del consumidor: ids de eventos entrantes ya aplicados.
+model ProcessedEvent {
+  id          String   @id @db.VarChar(64)
+  name        String   @db.VarChar(64)
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@map("processed_events")
+}
+
+/// Notificaciones salientes (A7). Sin datos personales: se leen del lead al enviar.
+model Notification {
+  id            String             @id @default(uuid()) @db.Uuid
+  leadId        String             @map("lead_id") @db.Uuid
+  channel       String             @db.VarChar(16)
+  template      String             @db.VarChar(64)
+  status        NotificationStatus @default(PENDING)
+  attempts      Int                @default(0)
+  nextAttemptAt DateTime           @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  sentAt        DateTime?          @map("sent_at") @db.Timestamptz(6)
+  lastError     String?            @map("last_error") @db.VarChar(1000)
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([leadId])
+  @@map("notifications")
+}
+
+/// Correlativos sin huecos por marca, tipo (LR = libro de reclamaciones, ARCO) y año.
+model ComplianceSequence {
+  brand     String @db.VarChar(32)
+  kind      String @db.VarChar(16)
+  year      Int
+  lastValue Int    @map("last_value")
+
+  @@id([brand, kind, year])
+  @@map("compliance_sequences")
+}
+
+/// Libro de Reclamaciones (A5).
+model Complaint {
+  id              String    @id @db.Uuid
+  code            String    @unique @db.VarChar(32)
+  brand           String    @db.VarChar(32)
+  kind            String    @db.VarChar(16)
+  status          String    @default("received") @db.VarChar(16)
+  /// cifrada
+  fullName        String    @map("full_name")
+  documentType    String    @map("document_type") @db.VarChar(16)
+  /// cifrada
+  documentNumber  String    @map("document_number")
+  /// cifrada
+  address         String
+  /// cifrada
+  phone           String
+  /// cifrada
+  email           String
+  emailHash       String    @map("email_hash") @db.VarChar(64)
+  isMinor         Boolean   @default(false) @map("is_minor")
+  /// cifrada
+  guardianName    String?   @map("guardian_name")
+  itemType        String    @map("item_type") @db.VarChar(16)
+  itemDescription String    @map("item_description") @db.VarChar(300)
+  itemAmount      Int?      @map("item_amount")
+  detail          String
+  request         String
+  ipHash          String?   @map("ip_hash") @db.VarChar(64)
+  receivedAt      DateTime  @map("received_at") @db.Timestamptz(6)
+  responseDueBy   DateTime  @map("response_due_by") @db.Timestamptz(6)
+  response        String?
+  respondedAt     DateTime? @map("responded_at") @db.Timestamptz(6)
+  respondedBy     String?   @map("responded_by") @db.VarChar(254)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([brand, status, receivedAt(sort: Desc)], map: "complaints_brand_status_received_idx")
+  @@map("complaints")
+}
+
+/// Solicitudes ARCO (C9).
+model PrivacyRequest {
+  id            String    @id @db.Uuid
+  code          String    @unique @db.VarChar(32)
+  brand         String    @db.VarChar(32)
+  type          String    @db.VarChar(32)
+  status        String    @default("received") @db.VarChar(16)
+  /// cifrada
+  fullName      String    @map("full_name")
+  /// cifrada
+  email         String
+  emailHash     String    @map("email_hash") @db.VarChar(64)
+  /// cifrada
+  phone         String?
+  phoneHash     String?   @map("phone_hash") @db.VarChar(64)
+  reference     String?   @db.VarChar(20)
+  detail        String?
+  ipHash        String?   @map("ip_hash") @db.VarChar(64)
+  receivedAt    DateTime  @map("received_at") @db.Timestamptz(6)
+  responseDueBy DateTime  @map("response_due_by") @db.Timestamptz(6)
+  resolution    String?
+  resolvedAt    DateTime? @map("resolved_at") @db.Timestamptz(6)
+  resolvedBy    String?   @map("resolved_by") @db.VarChar(254)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([brand, status, receivedAt(sort: Desc)], map: "privacy_requests_brand_status_received_idx")
+  @@map("privacy_requests")
+}
+
+/// Auditoría de acciones internas (C24). Nunca guarda cuerpos ni datos personales.
+model AuditLog {
+  id       String   @id @db.Uuid
+  at       DateTime @db.Timestamptz(6)
+  caller   String   @db.VarChar(64)
+  actor    String?  @db.VarChar(254)
+  action   String   @db.VarChar(64)
+  target   String?  @db.VarChar(128)
+  metadata Json?
+
+  @@index([at(sort: Desc)], map: "audit_log_at_idx")
+  @@map("audit_log")
+}

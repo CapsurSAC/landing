@@ -1,0 +1,145 @@
+import { z } from 'zod';
+import {
+  base64Key32Schema,
+  base64KeyMin32Schema,
+  booleanFlagSchema,
+  corsOriginsSchema,
+  csvOf,
+  databaseUrlSchema,
+  defineEnv,
+  emptyAsUndefined,
+  internalTokensSchema,
+  logLevelSchema,
+  nodeEnvSchema,
+  optionalStringSchema,
+  portSchema,
+  rabbitUrlSchema,
+  redisUrlSchema,
+  sentryDsnSchema,
+  type EnvOf,
+} from '@capsur/config';
+
+/**
+ * Definición de las variables de entorno de leads-service (B25).
+ *
+ * Este módulo NO tiene efectos al importarse: lo lee el CLI
+ * `capsur-env-example` para regenerar `.env.example`
+ * (`pnpm --filter @capsur/leads-service env:example`). La carga validada está
+ * en `env.ts`.
+ */
+
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Cada feriado debe tener el formato YYYY-MM-DD');
+
+export const envDefinition = defineEnv(
+  {
+    NODE_ENV: nodeEnvSchema,
+    PORT: portSchema.default(3002),
+    LOG_LEVEL: logLevelSchema,
+    DATABASE_URL: databaseUrlSchema,
+    REDIS_URL: redisUrlSchema,
+    RABBITMQ_URL: rabbitUrlSchema,
+    INTERNAL_API_TOKENS: internalTokensSchema,
+    SWAGGER_ENABLED: booleanFlagSchema.default(false),
+    SENTRY_DSN: sentryDsnSchema,
+    SENTRY_ENVIRONMENT: optionalStringSchema,
+    CORS_ORIGINS: corsOriginsSchema,
+    PII_ENCRYPTION_KEY: base64Key32Schema,
+    // La clave de desarrollo de la spec decodifica a 34 bytes: se exige un mínimo, no un tamaño exacto.
+    PII_HASH_KEY: base64KeyMin32Schema,
+    LEAD_TOKEN_SECRET: z.string().min(16, 'Debe tener al menos 16 caracteres'),
+    LEAD_RETENTION_DAYS: z.coerce.number().int().min(30).max(3650).default(730),
+    RETENTION_HOUR: z.coerce.number().int().min(0).max(23).default(3),
+    PROMOTIONS_SERVICE_URL: z.url({ error: 'Debe ser una URL http(s)' }),
+    PROMOTIONS_SERVICE_TOKEN: z.string().min(1, 'Token de leads-service ante promotions-service'),
+    WHATSAPP_NUMBER: z.string().regex(/^[1-9]\d{7,14}$/, 'Debe ser E.164 sin el signo +'),
+    BRAND_DISPLAY_NAME: z.string().min(1).default('Sistemas del Sur'),
+    REFERENCE_PREFIX: z
+      .string()
+      .regex(/^[A-Z]{2,5}$/, 'Debe tener entre 2 y 5 letras mayúsculas')
+      .default('SIS'),
+    OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(250).max(60_000).default(2000),
+    LEADS_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(10_000).default(10),
+    LEADS_PHONE_RATE_LIMIT_PER_HOUR: z.coerce.number().int().min(1).max(1000).default(5),
+    COMPLIANCE_RATE_LIMIT_PER_HOUR: z.coerce.number().int().min(1).max(1000).default(5),
+    IP_HASH_PEPPER: z.string().min(16, 'Debe tener al menos 16 caracteres'),
+    TURNSTILE_SECRET_KEY: optionalStringSchema,
+    PERU_HOLIDAYS: csvOf(isoDateSchema),
+    SMTP_URL: emptyAsUndefined(z.url({ protocol: /^smtps?$/, error: 'Debe ser una URL smtp:// o smtps://' }).optional()),
+    MAIL_FROM: z.string().min(3).default('Sistemas del Sur <no-reply@sistemasdelsur.edu.pe>'),
+    DAILY_REPORT_WEBHOOK_URL: emptyAsUndefined(z.url({ error: 'Debe ser una URL https' }).optional()),
+    DAILY_REPORT_HOUR: z.coerce.number().int().min(0).max(23).default(8),
+  },
+  {
+    title: 'leads-service: variables de entorno (desarrollo)',
+    examples: {
+      NODE_ENV: 'development',
+      PORT: '3002',
+      LOG_LEVEL: 'debug',
+      DATABASE_URL: 'postgresql://leads:leads@localhost:5432/leads?schema=public',
+      REDIS_URL: 'redis://localhost:6379',
+      RABBITMQ_URL: 'amqp://leads_svc:leads_svc_local@localhost:5672',
+      INTERNAL_API_TOKENS: '{"admin-web":"dev-admin-to-leads"}',
+      SWAGGER_ENABLED: 'false',
+      SENTRY_DSN: '',
+      SENTRY_ENVIRONMENT: '',
+      CORS_ORIGINS: 'http://localhost:3000',
+      PII_ENCRYPTION_KEY: 'ZGV2LW9ubHktcGlpLWtleS0zMi1ieXRlcy1sb25nISE=',
+      PII_HASH_KEY: 'ZGV2LW9ubHktaGFzaC1rZXktMzItYnl0ZXMtbG9uZyEhIQ==',
+      LEAD_TOKEN_SECRET: 'dev-only-lead-token-secret-change-me',
+      LEAD_RETENTION_DAYS: '730',
+      RETENTION_HOUR: '3',
+      PROMOTIONS_SERVICE_URL: 'http://localhost:3001',
+      PROMOTIONS_SERVICE_TOKEN: 'dev-leads-to-promotions',
+      WHATSAPP_NUMBER: '51987867402',
+      BRAND_DISPLAY_NAME: 'Sistemas del Sur',
+      REFERENCE_PREFIX: 'SIS',
+      OUTBOX_POLL_INTERVAL_MS: '2000',
+      LEADS_RATE_LIMIT_PER_MINUTE: '10',
+      LEADS_PHONE_RATE_LIMIT_PER_HOUR: '5',
+      COMPLIANCE_RATE_LIMIT_PER_HOUR: '5',
+      IP_HASH_PEPPER: 'cambia-esta-pimienta-en-produccion',
+      TURNSTILE_SECRET_KEY: '',
+      PERU_HOLIDAYS:
+        '2026-01-01,2026-04-02,2026-04-03,2026-05-01,2026-06-07,2026-06-29,2026-07-23,2026-07-28,2026-07-29,2026-08-06,2026-08-30,2026-10-08,2026-11-01,2026-12-08,2026-12-09,2026-12-25',
+      SMTP_URL: '',
+      MAIL_FROM: 'Sistemas del Sur <no-reply@sistemasdelsur.edu.pe>',
+      DAILY_REPORT_WEBHOOK_URL: '',
+      DAILY_REPORT_HOUR: '8',
+    },
+    describe: {
+      NODE_ENV: 'development | test | production',
+      LOG_LEVEL: 'Nivel de pino (fatal, error, warn, info, debug, trace, silent)',
+      DATABASE_URL: 'PostgreSQL propio del servicio (base `leads`)',
+      REDIS_URL: 'Opcional: caché de idempotencia, rate limiting compartido y candados de tareas programadas',
+      RABBITMQ_URL: 'Usuario `leads_svc` (C21): solo escribe en capsur.events y lee leads.*',
+      INTERNAL_API_TOKENS: 'Llamadores de /internal/*: JSON {"<llamador>":"<token>"}',
+      SWAGGER_ENABLED: 'Expone /internal/docs en producción (siempre con token interno)',
+      SENTRY_DSN: 'Vacío = Sentry desactivado',
+      SENTRY_ENVIRONMENT: 'Por defecto NODE_ENV',
+      CORS_ORIGINS: 'Orígenes permitidos separados por comas',
+      PII_ENCRYPTION_KEY: 'AES-256-GCM para datos personales en reposo (32 bytes en base64). NO usar la de desarrollo en producción',
+      PII_HASH_KEY: 'HMAC para phone_hash/email_hash (≥ 32 bytes en base64)',
+      LEAD_TOKEN_SECRET: 'Secreto HMAC del statusToken (x-lead-token)',
+      LEAD_RETENTION_DAYS: 'Días tras los que se anonimiza un lead (retención, C9)',
+      RETENTION_HOUR: 'Hora de Lima (0-23) del job diario de retención',
+      PROMOTIONS_SERVICE_URL: 'Base URL de promotions-service',
+      PROMOTIONS_SERVICE_TOKEN: 'Bearer de leads-service ante promotions-service (C4)',
+      WHATSAPP_NUMBER: 'Número de captación en E.164 sin "+". Verificar antes de producción',
+      BRAND_DISPLAY_NAME: 'Nombre de marca en el mensaje de WhatsApp y el correo',
+      REFERENCE_PREFIX: 'Prefijo de la referencia corta (SIS-XXXXX) y de los códigos de reclamos/ARCO',
+      OUTBOX_POLL_INTERVAL_MS: 'Intervalo base del relay de outbox (se espacia hasta x5 si no hay trabajo)',
+      LEADS_RATE_LIMIT_PER_MINUTE: 'POST /api/v1/leads por IP y minuto (Redis compartido)',
+      LEADS_PHONE_RATE_LIMIT_PER_HOUR: 'POST /api/v1/leads por teléfono (hash) y hora',
+      COMPLIANCE_RATE_LIMIT_PER_HOUR: 'Reclamaciones y solicitudes ARCO por IP y hora',
+      IP_HASH_PEPPER: 'Pimienta del hash de IP (≥ 16 caracteres). Cambiar en producción',
+      TURNSTILE_SECRET_KEY: 'Cloudflare Turnstile; vacío = no se exige captcha',
+      PERU_HOLIDAYS: 'Feriados nacionales (YYYY-MM-DD, separados por comas) para los plazos en días hábiles',
+      SMTP_URL: 'Vacío = sin correo de confirmación. p. ej. smtps://usuario:clave@smtp.example.com:465',
+      MAIL_FROM: 'Remitente del correo de confirmación',
+      DAILY_REPORT_WEBHOOK_URL: 'Webhook compatible con Slack ({ text }); vacío = sin reporte diario',
+      DAILY_REPORT_HOUR: 'Hora de Lima (0-23) del reporte diario',
+    },
+  },
+);
+
+export type Env = EnvOf<typeof envDefinition>;

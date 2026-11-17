@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { getPromotions, getSpecialties } from '@/lib/catalog';
+import { peruPhoneError } from '@/lib/lead-form';
 import { upsertLead } from '@/server/db';
 
 export const dynamic = 'force-dynamic';
@@ -17,8 +18,9 @@ const LeadBody = z.object({
   clientKey: z.uuid(),
   whatsappSent: z.boolean().default(false),
   fullName: text(120).default(''),
-  phoneCountry: z.string().regex(/^[A-Z]{2}$/).default('PE'),
-  phone: z.string().regex(/^\d{0,15}$/).default(''),
+  // Solo celulares de Perú: 9 dígitos sin el +51.
+  phoneCountry: z.literal('PE').default('PE'),
+  phone: z.string().regex(/^\d{0,9}$/).default(''),
   email: text(160).toLowerCase().default(''),
   campus: z.enum(['tacna', 'arequipa']).default('tacna'),
   promotionId: text(80).default(''),
@@ -42,7 +44,7 @@ function hasContactData(b: Body): boolean {
 }
 
 function isComplete(b: Body): boolean {
-  return b.fullName.length >= 3 && b.phone.length >= 6 && z.email().safeParse(b.email).success && b.promotionId !== '';
+  return b.fullName.length >= 3 && !peruPhoneError(b.phone) && z.email().safeParse(b.email).success && b.promotionId !== '';
 }
 
 /* shortcut: límite por IP en memoria (se reinicia con el servidor); detrás de varios servidores haría falta uno compartido. */

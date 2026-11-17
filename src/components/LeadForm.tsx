@@ -1,14 +1,14 @@
 'use client';
 
 import type { Campus, Promotion } from '@capsur/api-contracts';
-import { ArrowRight, ChevronDown, Mail, MapPin, Phone, User } from 'lucide-react';
+import { ArrowRight, Mail, MapPin, Phone, User } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FocusEvent, type FormEvent } from 'react';
 import { WhatsAppIcon } from '@/components/icons/WhatsAppIcon';
 import { institution } from '@/content/institution';
-import { phoneCountries, siteConfig, type PhoneCountryCode } from '@/lib/config';
+import { siteConfig } from '@/lib/config';
 import { LEAD_REGISTERED_EVENT } from '@/lib/events';
-import { INITIAL_LEAD_FORM, nationalPhoneDigits, validateLeadForm, type LeadFieldName, type LeadFormValues } from '@/lib/lead-form';
+import { INITIAL_LEAD_FORM, sanitizePeruPhone, validateLeadForm, type LeadFieldName, type LeadFormValues } from '@/lib/lead-form';
 import { clearDraft, leadKey, loadDraft, resetLeadKey, saveDraft } from '@/lib/session-store';
 import { rememberAttribution } from '@/lib/attribution';
 import { track } from '@/lib/tracking';
@@ -63,8 +63,8 @@ export function LeadForm({ promotion, specialtyIds, specialtyNames, onMissingPro
           clientKey: leadKey(),
           whatsappSent,
           fullName: values.fullName.trim(),
-          phoneCountry: values.phoneCountry,
-          phone: nationalPhoneDigits(values).slice(0, 15),
+          phoneCountry: 'PE',
+          phone: sanitizePeruPhone(values.phone),
           email: values.email.trim().toLowerCase(),
           campus: values.campus,
           promotionId: promotion?.id ?? '',
@@ -109,7 +109,6 @@ export function LeadForm({ promotion, specialtyIds, specialtyNames, onMissingPro
   }, []);
 
   const clientErrors = useMemo(() => validateLeadForm(values), [values]);
-  const country = phoneCountries.find((c) => c.code === values.phoneCountry) ?? phoneCountries[0];
 
   const visibleError = (field: FieldName): string | undefined => {
     if (touched[field] || submitted) return clientErrors[field];
@@ -237,52 +236,33 @@ export function LeadForm({ promotion, specialtyIds, specialtyNames, onMissingPro
       </div>
 
       <div>
-        {/* Móvil: columnas que pueden encogerse (evita el desborde horizontal a 375 px); desde sm, la rejilla aprobada. */}
-        <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-2.5 sm:grid-cols-[minmax(8.75rem,auto)_1fr]">
-          <div className="field-shell relative pr-3" data-invalid={Boolean(visibleError('phone'))}>
-            <Phone className="size-5 shrink-0 text-brand-500" aria-hidden="true" />
-            <label htmlFor={`${id}-country`} className="visually-hidden">
-              Código de país
-            </label>
-            <select
-              id={`${id}-country`}
-              name="phoneCountry"
-              value={values.phoneCountry}
-              onChange={(e) => update('phoneCountry', e.target.value as PhoneCountryCode)}
-              className="min-w-0 flex-1 pr-9 font-bold sm:flex-none"
-              autoComplete="tel-country-code"
-            >
-              {phoneCountries.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.dial} {c.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 size-4 text-ink-600" aria-hidden="true" />
-          </div>
-          <div className="field-shell" data-invalid={Boolean(visibleError('phone'))}>
-            <label htmlFor={`${id}-phone`} className="visually-hidden">
-              Número de WhatsApp
-            </label>
-            <input
-              ref={(el) => {
-                fieldRefs.current.phone = el;
-              }}
-              id={`${id}-phone`}
-              name="phone"
-              type="tel"
-              inputMode="numeric"
-              autoComplete="tel-national"
-              placeholder={country.placeholder}
-              required
-              enterKeyHint="next"
-              value={values.phone}
-              onChange={(e) => update('phone', e.target.value)}
-              onBlur={onBlur('phone')}
-              aria-invalid={Boolean(visibleError('phone'))}
-              aria-describedby={visibleError('phone') ? errorIds.phone : undefined}
-            />
-          </div>
+        {/* Solo celulares de Perú: el +51 es fijo y el campo admite 9 dígitos. */}
+        <div className="field-shell" data-invalid={Boolean(visibleError('phone'))}>
+          <Phone className="size-5 shrink-0 text-brand-500" aria-hidden="true" />
+          <span className="shrink-0 border-r border-mist-200 pr-3 font-bold text-ink-900" aria-hidden="true">
+            +51
+          </span>
+          <label htmlFor={`${id}-phone`} className="visually-hidden">
+            Celular con WhatsApp (Perú, +51)
+          </label>
+          <input
+            ref={(el) => {
+              fieldRefs.current.phone = el;
+            }}
+            id={`${id}-phone`}
+            name="phone"
+            type="tel"
+            inputMode="numeric"
+            autoComplete="tel-national"
+            placeholder="987 654 321"
+            required
+            enterKeyHint="next"
+            value={values.phone}
+            onChange={(e) => update('phone', sanitizePeruPhone(e.target.value))}
+            onBlur={onBlur('phone')}
+            aria-invalid={Boolean(visibleError('phone'))}
+            aria-describedby={visibleError('phone') ? errorIds.phone : undefined}
+          />
         </div>
         <FieldError id={errorIds.phone} message={visibleError('phone')} />
       </div>

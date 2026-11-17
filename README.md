@@ -50,7 +50,14 @@ Reinicia el servidor después de cambiarlos. Seguridad: la contraseña solo se g
 
 ## Publicar
 
-Hace falta un hosting que corra Node.js 22+ **con disco persistente** para `DATA_DIR`: un VPS o EasyPanel (con un volumen montado en la carpeta de datos). En Vercel o Netlify los leads se perderían, porque su disco se borra en cada despliegue. Haz copia de `data/landing.db` periódicamente.
+Hace falta un hosting que corra Node.js 22+ **con disco persistente** para `DATA_DIR`: un VPS o EasyPanel (con un volumen montado en la carpeta de datos). En Vercel o Netlify los leads se perderían, porque su disco se borra en cada despliegue. Haz copia de `landing.db` periódicamente.
+
+### EasyPanel (con el `Dockerfile` de la raíz)
+
+1. **Fuente:** este repositorio, rama `main`. **Build:** Dockerfile (`Dockerfile` en la raíz).
+2. **Entorno:** `ADMIN_USER`, `ADMIN_PASSWORD_HASH`, `ADMIN_SESSION_SECRET` (genera los dos últimos con `node scripts/hash-password.mjs "tu-contraseña"`) y `NEXT_PUBLIC_SITE_URL=https://tu-dominio`. Cambiar una `NEXT_PUBLIC_*` exige volver a desplegar.
+3. **Montajes:** un volumen en `/data`. Sin él, los leads se borran en cada despliegue.
+4. **Dominio:** puerto `3000`, con HTTPS. La cookie del panel es `Secure`: por `http://` no se puede iniciar sesión.
 
 ## Límites conocidos
 

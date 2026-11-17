@@ -51,7 +51,8 @@ RUN mkdir -p .next/cache /data && chown node:node .next/cache /data
 VOLUME ["/data"]
 USER node
 EXPOSE 3000
+# Usa el puerto real: EasyPanel y otros paneles cambian PORT (p. ej. a 80).
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
-  CMD wget -q -T 4 -O /dev/null http://127.0.0.1:3000/api/health || exit 1
+  CMD wget -q -T 4 -O /dev/null "http://127.0.0.1:${PORT}/api/health" || exit 1
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "server.js"]
